@@ -12,16 +12,19 @@ import static org.folio.rest.support.http.InterfaceUrls.locLibraryStorageUrl;
 import static org.folio.rest.support.http.InterfaceUrls.locationsStorageUrl;
 import static org.folio.rest.support.http.InterfaceUrls.materialTypesStorageUrl;
 import static org.folio.util.StringUtil.urlEncode;
-import static org.hamcrest.CoreMatchers.anyOf;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.core.IsNull.notNullValue;
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -45,9 +48,11 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 public class ItemStorageTest extends TestBaseWithInventoryUtil {
+
+  private static final String TAG_VALUE = "test-tag";
+
   private static String journalMaterialTypeID;
   private static String bookMaterialTypeID;
-  private static String videoMaterialTypeID;
   private static String canCirculateLoanTypeID;
   private static UUID mainLibraryLocationId;
   private static UUID annexLibraryLocationId;
@@ -64,26 +69,24 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     StorageTestSuite.deleteAll(instancesStorageUrl(""));
 
     StorageTestSuite.deleteAll(materialTypesStorageUrl(""));
-    StorageTestSuite.deleteAll(loanTypesStorageUrl(""));
-
     StorageTestSuite.deleteAll(locationsStorageUrl(""));
     StorageTestSuite.deleteAll(locLibraryStorageUrl(""));
     StorageTestSuite.deleteAll(locCampusStorageUrl(""));
     StorageTestSuite.deleteAll(locInstitutionStorageUrl(""));
+    StorageTestSuite.deleteAll(loanTypesStorageUrl(""));
 
-    journalMaterialTypeID = new MaterialTypesClient(client, materialTypesStorageUrl("")).create("journal");
-    bookMaterialTypeID = new MaterialTypesClient(client, materialTypesStorageUrl("")).create("book");
-    videoMaterialTypeID = new MaterialTypesClient(client, materialTypesStorageUrl("")).create("video");
+    MaterialTypesClient materialTypesClient = new MaterialTypesClient(client, materialTypesStorageUrl(""));
+    journalMaterialTypeID = materialTypesClient.create("journal");
+    bookMaterialTypeID = materialTypesClient.create("book");
     canCirculateLoanTypeID = new LoanTypesClient(client, loanTypesStorageUrl("")).create("Can Circulate");
 
     LocationsTest.createLocUnits(true);
     mainLibraryLocationId = LocationsTest.createLocation(null, "Main Library (Item)", "It/M");
     annexLibraryLocationId = LocationsTest.createLocation(null, "Annex Library (item)", "It/A");
-
   }
 
   @Before
-  public void beforeEach() throws MalformedURLException {
+  public void beforeEach() {
     StorageTestSuite.deleteAll(itemsStorageUrl(""));
     StorageTestSuite.deleteAll(holdingsStorageUrl(""));
     StorageTestSuite.deleteAll(instancesStorageUrl(""));
@@ -115,6 +118,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     itemToCreate.put("materialTypeId", journalMaterialTypeID);
     itemToCreate.put("permanentLoanTypeId", canCirculateLoanTypeID);
     itemToCreate.put("temporaryLocationId", annexLibraryLocationId.toString());
+    itemToCreate.put("tags", new JsonObject().put("tagList",new JsonArray().add(TAG_VALUE)));
 
     //TODO: Replace with real service point when validated
     itemToCreate.put("inTransitDestinationServicePointId", inTransitServicePointId);
@@ -163,6 +167,11 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
       is(annexLibraryLocationId.toString()));
     assertThat(itemFromPost.getString("inTransitDestinationServicePointId"),
       is(inTransitServicePointId));
+
+    List<String> tags = itemFromGet.getJsonObject("tags").getJsonArray("tagList").getList();
+
+    assertThat(tags.size(), is(1));
+    assertThat(tags, hasItem(TAG_VALUE));
   }
 
   @Test
@@ -178,7 +187,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
       .put("id", id.toString())
       .put("holdingsRecordId", holdingsRecordId.toString())
       .put("materialTypeId", journalMaterialTypeID)
-      .put("permanentLoanTypeId", canCirculateLoanTypeID);
+      .put("permanentLoanTypeId", canCirculateLoanTypeID)
+      .put("tags", new JsonObject().put("tagList",new JsonArray().add(TAG_VALUE)));
 
     CompletableFuture<Response> createCompleted = new CompletableFuture<>();
 
@@ -203,6 +213,10 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     assertThat(itemFromGet.getString("id"), is(id.toString()));
     assertThat(itemFromGet.getJsonObject("status").getString("name"), is("Available"));
 
+    List<String> tags = itemFromGet.getJsonObject("tags").getJsonArray("tagList").getList();
+
+    assertThat(tags.size(), is(1));
+    assertThat(tags, hasItem(TAG_VALUE));
   }
 
   @Test
@@ -213,6 +227,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
 
     JsonObject itemToCreate = nod(null, holdingsRecordId);
+
+    itemToCreate.put("tags", new JsonObject().put("tagList", new JsonArray().add(TAG_VALUE)));
 
     CompletableFuture<Response> createCompleted = new CompletableFuture<>();
 
@@ -246,6 +262,11 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
       is(canCirculateLoanTypeID));
     assertThat(itemFromGet.getString("temporaryLocationId"),
       is(annexLibraryLocationId.toString()));
+
+    List<String> tags = itemFromGet.getJsonObject("tags").getJsonArray("tagList").getList();
+
+    assertThat(tags.size(), is(1));
+    assertThat(tags, hasItem(TAG_VALUE));
   }
 
   @Test
@@ -334,10 +355,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     assertThat(postResponse.getStatusCode(), is(HttpURLConnection.HTTP_BAD_REQUEST));
 
-    //Postgresql 10.0 has a different error message for invalid UUID
-    assertThat(postResponse.getBody(), anyOf(
-      is("invalid input syntax for type uuid: \"1234\""),
-      is("invalid input syntax for uuid: \"1234\"")));
+    assertThat(postResponse.getBody(), containsString("UUID"));
   }
 
   @Test
@@ -422,7 +440,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
   }
 
   @Test
-  public void canCreateAnItemAtSpecificLocation()
+  public void canCreateAnItemWithManyProperties()
     throws MalformedURLException, InterruptedException,
     ExecutionException, TimeoutException {
 
@@ -441,18 +459,18 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     itemToCreate.put("materialTypeId", journalMaterialTypeID);
     itemToCreate.put("permanentLoanTypeId", canCirculateLoanTypeID);
     itemToCreate.put("temporaryLocationId", annexLibraryLocationId.toString());
+    itemToCreate.put("tags", new JsonObject().put("tagList", new JsonArray().add(TAG_VALUE)));
 
     //TODO: Replace with real service point when validated
     itemToCreate.put("inTransitDestinationServicePointId", inTransitServicePointId);
 
     CompletableFuture<Response> createCompleted = new CompletableFuture<>();
-
-    client.put(itemsStorageUrl(String.format("/%s", id)), itemToCreate,
+    client.post(itemsStorageUrl(""), itemToCreate,
       StorageTestSuite.TENANT_ID, ResponseHandler.empty(createCompleted));
 
-    Response putResponse = createCompleted.get(5, TimeUnit.SECONDS);
+    Response postResponse = createCompleted.get(5, TimeUnit.SECONDS);
 
-    assertThat(putResponse.getStatusCode(), is(HttpURLConnection.HTTP_NO_CONTENT));
+    assertThat(postResponse.getStatusCode(), is(HttpURLConnection.HTTP_CREATED));
 
     Response getResponse = getById(id);
 
@@ -461,19 +479,18 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     JsonObject item = getResponse.getJson();
 
+    List<String> tags = item.getJsonObject("tags").getJsonArray("tagList").getList();
+
     assertThat(item.getString("id"), is(id.toString()));
     assertThat(item.getString("holdingsRecordId"), is(holdingsRecordId.toString()));
     assertThat(item.getString("barcode"), is("565578437802"));
-    assertThat(item.getJsonObject("status").getString("name"),
-      is("Available"));
-    assertThat(item.getString("materialTypeId"),
-      is(journalMaterialTypeID));
-    assertThat(item.getString("permanentLoanTypeId"),
-      is(canCirculateLoanTypeID));
-    assertThat(item.getString("temporaryLocationId"),
-      is(annexLibraryLocationId.toString()));
-    assertThat(item.getString("inTransitDestinationServicePointId"),
-      is(inTransitServicePointId));
+    assertThat(item.getJsonObject("status").getString("name"), is("Available"));
+    assertThat(item.getString("materialTypeId"), is(journalMaterialTypeID));
+    assertThat(item.getString("permanentLoanTypeId"), is(canCirculateLoanTypeID));
+    assertThat(item.getString("temporaryLocationId"), is(annexLibraryLocationId.toString()));
+    assertThat(item.getString("inTransitDestinationServicePointId"), is(inTransitServicePointId));
+    assertThat(tags.size(), is(1));
+    assertThat(tags, hasItem(TAG_VALUE));
   }
 
   @Test
@@ -565,7 +582,9 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     JsonObject replacement = itemToCreate.copy();
       replacement.put("barcode", "125845734657")
-              .put("temporaryLocationId", mainLibraryLocationId.toString());
+              .put("temporaryLocationId", mainLibraryLocationId.toString())
+              .put("tags", new JsonObject().put("tagList", new JsonArray().add(TAG_VALUE)));
+
 
     CompletableFuture<Response> replaceCompleted = new CompletableFuture<>();
 
@@ -583,6 +602,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     JsonObject item = getResponse.getJson();
 
+    List<String> tags = item.getJsonObject("tags").getJsonArray("tagList").getList();
+
     assertThat(item.getString("id"), is(id.toString()));
     assertThat(item.getString("holdingsRecordId"), is(holdingsRecordId.toString()));
     assertThat(item.getString("barcode"), is("125845734657"));
@@ -592,6 +613,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
       is(journalMaterialTypeID));
     assertThat(item.getString("temporaryLocationId"),
       is(mainLibraryLocationId.toString()));
+    assertThat(tags.size(), is(1));
+    assertThat(tags, hasItem(TAG_VALUE));
   }
 
   @Test
@@ -612,7 +635,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     replacement
       .put("status", new JsonObject().put("name", "In transit"))
-      .put("inTransitDestinationServicePointId", inTransitServicePointId);
+      .put("inTransitDestinationServicePointId", inTransitServicePointId)
+      .put("tags", new JsonObject().put("tagList", new JsonArray().add(TAG_VALUE)));
 
     CompletableFuture<Response> replaceCompleted = new CompletableFuture<>();
 
@@ -630,6 +654,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     JsonObject item = getResponse.getJson();
 
+    List<String> tags = item.getJsonObject("tags").getJsonArray("tagList").getList();
+
     assertThat(item.getString("id"), is(id.toString()));
 
     assertThat(item.getJsonObject("status").getString("name"),
@@ -637,6 +663,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     assertThat(item.getString("inTransitDestinationServicePointId"),
       is(inTransitServicePointId));
+    assertThat(tags.size(), is(1));
+    assertThat(tags, hasItem(TAG_VALUE));
   }
 
   @Test
@@ -729,7 +757,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     CompletableFuture<Response> searchCompleted = new CompletableFuture<>();
 
-    String url = itemsStorageUrl("") + "?query=barcode=036000291452";
+    String url = itemsStorageUrl("") + "?query=barcode==036000291452";
 
     client.get(url,
       StorageTestSuite.TENANT_ID, ResponseHandler.json(searchCompleted));
@@ -766,7 +794,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     CompletableFuture<Response> searchCompleted = new CompletableFuture<>();
 
-    String url = itemsStorageUrl("") + "?query=barcode=673274826203";
+    String url = itemsStorageUrl("") + "?query=barcode==673274826203";
 
     client.get(url,
       StorageTestSuite.TENANT_ID, ResponseHandler.json(searchCompleted));
@@ -787,11 +815,126 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
   }
 
   @Test
+  public void canSearchForItemsByTags()
+    throws MalformedURLException,
+    InterruptedException,
+    ExecutionException,
+    TimeoutException,
+    UnsupportedEncodingException {
+
+    UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
+
+    createItem(addTags(TAG_VALUE, holdingsRecordId));
+    createItem(nod(holdingsRecordId));
+
+    CompletableFuture<Response> searchCompleted = new CompletableFuture<>();
+
+    String url = itemsStorageUrl("") + "?query=" + urlEncode("tags.tagList=" + TAG_VALUE);
+
+    client.get(url,
+      StorageTestSuite.TENANT_ID, ResponseHandler.json(searchCompleted));
+
+    Response searchResponse = searchCompleted.get(5, TimeUnit.SECONDS);
+
+    assertThat(searchResponse.getStatusCode(), is(200));
+
+    JsonObject searchBody = searchResponse.getJson();
+
+    JsonArray foundItems = searchBody.getJsonArray("items");
+
+    assertThat(searchBody.getInteger("totalRecords"), is(1));
+
+    assertThat(foundItems.size(), is(1));
+
+    assertTrue(searchResponse.getBody().contains(TAG_VALUE));
+
+    LinkedHashMap item = (LinkedHashMap) foundItems.getList().get(0);
+    LinkedHashMap<String, ArrayList<String>> itemTags = (LinkedHashMap<String, ArrayList<String>>) item.get("tags");
+
+    assertThat(itemTags.get("tagList"), hasItem(TAG_VALUE));
+  }
+
+  @Test
+  public void canSearchForItemsByStatus()
+    throws MalformedURLException,
+    InterruptedException,
+    ExecutionException,
+    TimeoutException,
+    UnsupportedEncodingException {
+
+    UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
+
+    createItem(smallAngryPlanet(UUID.randomUUID(), holdingsRecordId));
+    createItem(nod(UUID.randomUUID(), holdingsRecordId));
+    createItem(uprooted(UUID.randomUUID(), holdingsRecordId));
+    createItem(temeraire(UUID.randomUUID(), holdingsRecordId));
+    createItem(interestingTimes(UUID.randomUUID(), holdingsRecordId));
+
+    CompletableFuture<Response> searchCompleted = new CompletableFuture<>();
+
+    String url = itemsStorageUrl("") + "?query=" + urlEncode("status.name==\"Available\"");
+
+    client.get(url,
+      StorageTestSuite.TENANT_ID, ResponseHandler.json(searchCompleted));
+
+    Response searchResponse = searchCompleted.get(5, TimeUnit.SECONDS);
+
+    assertThat(searchResponse.getStatusCode(), is(200));
+
+    JsonObject searchBody = searchResponse.getJson();
+
+    JsonArray foundItems = searchBody.getJsonArray("items");
+
+    assertThat(searchBody.getInteger("totalRecords"), is(5));
+
+    assertThat(foundItems.size(), is(5));
+  }
+
+  @Test
+  public void cannotSearchForItemsByBarcodeAndNotMatchingId()
+    throws MalformedURLException,
+    InterruptedException,
+    ExecutionException,
+    TimeoutException {
+
+    UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
+
+    createItem(nod(holdingsRecordId));
+    createItem(uprooted(UUID.randomUUID(), holdingsRecordId));
+    createItem(smallAngryPlanet(holdingsRecordId).put("barcode", "673274826203"));
+    createItem(temeraire(UUID.randomUUID(), holdingsRecordId));
+    createItem(interestingTimes(UUID.randomUUID(), holdingsRecordId));
+
+    CompletableFuture<Response> searchCompleted = new CompletableFuture<>();
+
+    String url = itemsStorageUrl("") + "?query=" + urlEncode(String.format(
+      "barcode==\"673274826203\" and id<>%s'", UUID.randomUUID()));
+
+    client.get(url,
+      StorageTestSuite.TENANT_ID, ResponseHandler.json(searchCompleted));
+
+    Response searchResponse = searchCompleted.get(5, TimeUnit.SECONDS);
+
+    assertThat(searchResponse.getStatusCode(), is(200));
+    JsonObject searchBody = searchResponse.getJson();
+
+    JsonArray foundItems = searchBody.getJsonArray("items");
+
+    assertThat(foundItems.size(), is(1));
+    assertThat(searchBody.getInteger("totalRecords"), is(1));
+
+    assertThat(foundItems.getJsonObject(0).getString("barcode"),
+      is("673274826203"));
+  }
+
+  @Test
   public void canSearchForManyItemsByBarcode() throws Exception {
 
     UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
 
-    createItem(smallAngryPlanet(holdingsRecordId).put("barcode", "673274826203"));
+    createItem(smallAngryPlanet(holdingsRecordId)
+      .put("barcode", "673274826203")
+      .put("tags", new JsonObject().put("tagList", new JsonArray().add(TAG_VALUE))));
 
     CompletableFuture<Response> searchCompleted = new CompletableFuture<>();
 
@@ -809,6 +952,11 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     assertThat(foundItems.size(), is(1));
     assertThat(searchBody.getInteger("totalRecords"), is(1));
     assertThat(foundItems.getJsonObject(0).getString("barcode"), is("673274826203"));
+
+    LinkedHashMap item = (LinkedHashMap) foundItems.getList().get(0);
+    LinkedHashMap<String, ArrayList<String>> itemTags = (LinkedHashMap<String, ArrayList<String>>) item.get("tags");
+
+    assertThat(itemTags.get("tagList"), hasItem(TAG_VALUE));
   }
 
   @Test
@@ -839,8 +987,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     String error = searchResponse.getBody();
 
-    assertThat(error,
-      is("CQL State Error for 't': org.z3950.zing.cql.cql2pgjson.QueryValidationException: cql.serverChoice requested, but no serverChoiceIndexes defined."));
+    assertThat(error, containsString(
+        "QueryValidationException: cql.serverChoice requested, but no serverChoiceIndexes defined."));
   }
 
   @Test
@@ -932,80 +1080,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     assertThat(response.getBody(), is("Unable to process request Tenant must be set"));
   }
 
-  @Test
-  public void testCrossTableQueries() throws Exception {
-    String url = itemsStorageUrl("") + "?query=";
-
-    UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
-
-    createItem(createItemRequest(UUID.randomUUID(), holdingsRecordId,
-      "036000291452", journalMaterialTypeID));
-    createItem(createItemRequest(UUID.randomUUID(), holdingsRecordId,
-      "036000291443", bookMaterialTypeID));
-    createItem(createItemRequest(UUID.randomUUID(), holdingsRecordId,
-      "036000291415", videoMaterialTypeID));
-
-    //query on item and sort by material type
-    String url1 = url + urlEncode("barcode=03600* sortBy materialType.name/sort.descending");
-    String url2 = url + urlEncode("barcode=03600* sortBy materialType.name/sort.ascending");
-
-    //query and sort on material type via items end point
-    String url3 = url + urlEncode("materialType.name=Journal* sortBy materialType.name/sort.descending");
-
-    //query on item sort on item and material type
-    String url4 = url + urlEncode("barcode=036000* sortby materialType.name title");
-
-    //query on item and material type sort by material type
-    String url5 = url + urlEncode("barcode=036000* and materialType.name=Journal* sortby materialType.name");
-
-    //query on item and sort by item
-    String url6 = url + urlEncode("barcode=abc sortBy materialType.name");
-
-    //non existant material type - 0 results
-    String url7 = url + urlEncode("barcode=036000* and materialType.name=abc* sortby materialType.name");
-
-    String url8 = url + urlEncode("materialType="+ videoMaterialTypeID);
-
-    CompletableFuture<Response> cqlCF1 = new CompletableFuture<>();
-    CompletableFuture<Response> cqlCF2 = new CompletableFuture<>();
-    CompletableFuture<Response> cqlCF3 = new CompletableFuture<>();
-    CompletableFuture<Response> cqlCF4 = new CompletableFuture<>();
-    CompletableFuture<Response> cqlCF5 = new CompletableFuture<>();
-    CompletableFuture<Response> cqlCF6 = new CompletableFuture<>();
-    CompletableFuture<Response> cqlCF7 = new CompletableFuture<>();
-    CompletableFuture<Response> cqlCF8 = new CompletableFuture<>();
-
-    String[] urls = new String[]{url1, url2, url3, url4, url5, url6, url7, url8};
-    CompletableFuture<Response>[] cqlCF = new CompletableFuture[]
-      {cqlCF1, cqlCF2, cqlCF3, cqlCF4, cqlCF5, cqlCF6, cqlCF7, cqlCF8};
-
-    for(int i=0; i<8; i++){
-      CompletableFuture<Response> cf = cqlCF[i];
-      String cqlURL = urls[i];
-      client.get(cqlURL, StorageTestSuite.TENANT_ID, ResponseHandler.json(cf));
-
-      Response cqlResponse = cf.get(5, TimeUnit.SECONDS);
-      assertThat(cqlResponse.getStatusCode(), is(HttpURLConnection.HTTP_OK));
-      System.out.println(cqlResponse.getBody() +
-        "\nStatus - " + cqlResponse.getStatusCode() + " at " + System.currentTimeMillis() + " for " + cqlURL);
-
-      if(i==6){
-        assertThat(0, is(cqlResponse.getJson().getInteger("totalRecords")));
-      } else if(i==5){
-        assertThat(0, is(cqlResponse.getJson().getInteger("totalRecords")));
-      } else if(i==4){
-        assertThat(1, is(cqlResponse.getJson().getInteger("totalRecords")));
-      } else if(i==0){
-        assertThat("036000291415", is(cqlResponse.getJson().getJsonArray("items").getJsonObject(0).getString("barcode")));
-      }else if(i==1){
-        assertThat("036000291443", is(cqlResponse.getJson().getJsonArray("items").getJsonObject(0).getString("barcode")));
-      }else if(i==2){
-        assertThat(1, is(cqlResponse.getJson().getInteger("totalRecords")));
-      }
-    }
-  }
-
-  private Response getById(UUID id)
+   private Response getById(UUID id)
     throws MalformedURLException, InterruptedException,
     ExecutionException, TimeoutException {
 
@@ -1091,5 +1166,12 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
   private JsonObject interestingTimes(UUID itemId, UUID holdingsRecordId) {
     return createItemRequest(itemId, holdingsRecordId, "56454543534");
+  }
+
+  private JsonObject addTags(String tagValue, UUID holdingsRecordId) {
+    return smallAngryPlanet(holdingsRecordId)
+      .put("tags", new JsonObject()
+        .put("tagList", new JsonArray()
+          .add(tagValue)));
   }
 }

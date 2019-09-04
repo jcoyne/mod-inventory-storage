@@ -3,6 +3,7 @@ package org.folio.rest.api;
 import static org.folio.rest.impl.ServicePointAPI.SERVICE_POINT_CREATE_ERR_MSG_WITHOUT_BEING_PICKUP_LOC;
 import static org.folio.rest.impl.ServicePointAPI.SERVICE_POINT_CREATE_ERR_MSG_WITHOUT_HOLD_EXPIRY;
 import static org.folio.rest.support.http.InterfaceUrls.servicePointsUrl;
+
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertThat;
@@ -10,6 +11,9 @@ import static org.junit.Assert.assertThat;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -19,6 +23,7 @@ import java.util.concurrent.TimeoutException;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import org.folio.rest.jaxrs.model.HoldShelfExpiryPeriod;
+import org.folio.rest.jaxrs.model.StaffSlip;
 import org.folio.rest.support.AdditionalHttpStatusCodes;
 import org.folio.rest.support.Response;
 import org.folio.rest.support.ResponseHandler;
@@ -35,6 +40,7 @@ import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import static org.folio.rest.support.http.InterfaceUrls.servicePointsUsersUrl;
 
 /**
  *
@@ -50,6 +56,7 @@ public class ServicePointTest extends TestBase{
           ExecutionException,
           TimeoutException,
           MalformedURLException {
+             StorageTestSuite.deleteAll(servicePointsUsersUrl(""));
              StorageTestSuite.deleteAll(servicePointsUrl(""));
       }
 
@@ -603,11 +610,99 @@ public class ServicePointTest extends TestBase{
     assertThat(responseJson.getBoolean("pickupLocation"), is(false));
   }
 
+
+  @Test
+  public void canCreateServicePointWithStaffSlips()
+      throws InterruptedException,
+      ExecutionException,
+      TimeoutException,
+      MalformedURLException {
+
+    String uuidTrue = UUID.randomUUID().toString();
+    String uuidFalse = UUID.randomUUID().toString();
+    List<StaffSlip> staffSlips = new ArrayList<>(2);
+    staffSlips.add(new StaffSlip().withId(uuidTrue).withPrintByDefault(Boolean.TRUE));
+    staffSlips.add(new StaffSlip().withId(uuidFalse).withPrintByDefault(Boolean.FALSE));
+
+    Response response = createServicePoint(null, "Circ Desk 1", "cd1",
+        "Circulation Desk -- Hallway", null, 20, true, createHoldShelfExpiryPeriod(), staffSlips);
+    assertThat(response.getStatusCode(), is(HttpURLConnection.HTTP_CREATED));
+    assertThat(response.getJson().getString("id"), notNullValue());
+    assertThat(response.getJson().getString("code"), is("cd1"));
+    assertThat(response.getJson().getString("name"), is("Circ Desk 1"));
+    assertThat(response.getJson().getJsonArray("staffSlips").getJsonObject(0).getString("id"), is(uuidTrue));
+    assertThat(response.getJson().getJsonArray("staffSlips").getJsonObject(0).getBoolean("printByDefault"), is(Boolean.TRUE));
+    assertThat(response.getJson().getJsonArray("staffSlips").getJsonObject(1).getString("id"), is(uuidFalse));
+    assertThat(response.getJson().getJsonArray("staffSlips").getJsonObject(1).getBoolean("printByDefault"), is(Boolean.FALSE));
+  }
+
+  @Test
+  public void cannotCreateServicePointWithStaffSlipsMissingFields()
+      throws InterruptedException,
+      ExecutionException,
+      TimeoutException,
+      MalformedURLException {
+
+    String uuid = UUID.randomUUID().toString();
+    List<StaffSlip> staffSlips = new ArrayList<>(1);
+    staffSlips.add(new StaffSlip().withId(uuid));
+
+    Response response = createServicePoint(null, "Circ Desk 1", "cd1",
+        "Circulation Desk -- Hallway", null, 20, true, createHoldShelfExpiryPeriod(), staffSlips);
+    assertThat(response.getStatusCode(), is(422));
+  }
+
+  @Test
+  public void canUpdateAServicePointWithStaffSlips()
+          throws InterruptedException,
+          ExecutionException,
+          TimeoutException,
+          MalformedURLException {
+    UUID id = UUID.randomUUID();
+    String staffSlipId = UUID.randomUUID().toString();
+    List<StaffSlip> staffSlips = new ArrayList<>(2);
+    staffSlips.add(new StaffSlip().withId(staffSlipId).withPrintByDefault(Boolean.TRUE));
+    createServicePoint(id, "Circ Desk 1", "cd1",
+        "Circulation Desk -- Hallway", null, 20, true, createHoldShelfExpiryPeriod(), staffSlips);
+    JsonObject request = new JsonObject()
+            .put("id", id.toString())
+            .put("name", "Circ Desk 2")
+            .put("code", "cd2")
+            .put("discoveryDisplayName", "Circulation Desk -- Basement")
+            .put("pickupLocation", false)
+            .put("staffSlips", new JsonArray()
+                .add(new JsonObject()
+                    .put("id", staffSlipId)
+                    .put("printByDefault", Boolean.FALSE)));
+    CompletableFuture<Response> updated = new CompletableFuture<>();
+    send(servicePointsUrl("/" + id.toString()), HttpMethod.PUT, request.encode(),
+            SUPPORTED_CONTENT_TYPE_JSON_DEF, ResponseHandler.any(updated));
+    Response updateResponse = updated.get(5, TimeUnit.SECONDS);
+    assertThat(updateResponse.getStatusCode(), is(HttpURLConnection.HTTP_NO_CONTENT));
+    Response getResponse = getById(id);
+    assertThat(getResponse.getJson().getString("id"), is(id.toString()));
+    assertThat(getResponse.getJson().getString("code"), is("cd2"));
+    assertThat(getResponse.getJson().getString("name"), is("Circ Desk 2")); //should fail
+    assertThat(getResponse.getJson().getBoolean("pickupLocation"), is(false));
+    assertThat(getResponse.getJson().getJsonArray("staffSlips").getJsonObject(0).getString("id"), is(staffSlipId));
+    assertThat(getResponse.getJson().getJsonArray("staffSlips").getJsonObject(0).getBoolean("printByDefault"), is(Boolean.FALSE));
+  }
+
   // --- END TESTS --- //
 
   public static Response createServicePoint(UUID id, String name, String code,
                                             String discoveryDisplayName, String description, Integer shelvingLagTime,
                                             Boolean pickupLocation, HoldShelfExpiryPeriod shelfExpiryPeriod)
+    throws MalformedURLException, InterruptedException, ExecutionException, TimeoutException {
+
+    return createServicePoint(id, name, code, discoveryDisplayName, description,
+      shelvingLagTime, pickupLocation, shelfExpiryPeriod, Collections.emptyList());
+
+  }
+
+  private static Response createServicePoint(UUID id, String name, String code,
+                                            String discoveryDisplayName, String description, Integer shelvingLagTime,
+                                            Boolean pickupLocation, HoldShelfExpiryPeriod shelfExpiryPeriod, List<StaffSlip> slips)
     throws MalformedURLException, InterruptedException, ExecutionException, TimeoutException {
 
     CompletableFuture<Response> createServicePoint = new CompletableFuture<>();
@@ -622,9 +717,20 @@ public class ServicePointTest extends TestBase{
     if(pickupLocation != null) { request.put("pickupLocation", pickupLocation); }
     if(shelfExpiryPeriod != null) {request.put("holdShelfExpiryPeriod", new JsonObject(Json.encode(shelfExpiryPeriod)));}
 
+    if (!slips.isEmpty()) {
+      JsonArray staffSlips = new JsonArray();
+      for (StaffSlip ss : slips) {
+        JsonObject staffSlip = new JsonObject();
+        staffSlip.put("id", ss.getId());
+        staffSlip.put("printByDefault", ss.getPrintByDefault());
+        staffSlips.add(staffSlip);
+      }
+      request.put("staffSlips", staffSlips);
+    }
+
     send(servicePointsUrl(""), HttpMethod.POST, request.toString(),
-      SUPPORTED_CONTENT_TYPE_JSON_DEF,
-      ResponseHandler.json(createServicePoint));
+            SUPPORTED_CONTENT_TYPE_JSON_DEF,
+            ResponseHandler.json(createServicePoint));
     return createServicePoint.get(5, TimeUnit.SECONDS);
   }
 

@@ -10,20 +10,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import javax.ws.rs.core.Response;
+
+import org.folio.cql2pgjson.CQL2PgJSON;
+import org.folio.cql2pgjson.exception.FieldException;
 import org.folio.rest.RestVerticle;
 import org.folio.rest.jaxrs.model.HoldShelfExpiryPeriod;
 import org.folio.rest.jaxrs.model.Servicepoint;
 import org.folio.rest.jaxrs.model.Servicepoints;
-import org.folio.rest.persist.Criteria.Criteria;
-import org.folio.rest.persist.Criteria.Criterion;
 import org.folio.rest.persist.Criteria.Limit;
 import org.folio.rest.persist.Criteria.Offset;
+import org.folio.rest.persist.PgUtil;
 import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.persist.cql.CQLWrapper;
 import org.folio.rest.tools.utils.TenantTool;
 import org.folio.rest.tools.utils.ValidationHelper;
-import org.z3950.zing.cql.cql2pgjson.CQL2PgJSON;
-import org.z3950.zing.cql.cql2pgjson.FieldException;
 
 /**
  *
@@ -36,7 +36,7 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
   public static final String LOCATION_PREFIX = "/service-points/";
   public static final String ID_FIELD = "'id'";
   public static final String SERVICE_POINT_CREATE_ERR_MSG_WITHOUT_HOLD_EXPIRY = "Hold shelf expiry period must be specified when service point can be used for pickup.";
-  public static final String SERVICE_POINT_CREATE_ERR_MSG_WITHOUT_BEING_PICKUP_LOC= "Hold shelf expiry period cannot be specified when service point cannot be used for pickup";
+  public static final String SERVICE_POINT_CREATE_ERR_MSG_WITHOUT_BEING_PICKUP_LOC = "Hold shelf expiry period cannot be specified when service point cannot be used for pickup";
 
   PostgresClient getPGClient(Context vertxContext, String tenantId) {
     return PostgresClient.getInstance(vertxContext.owner(), tenantId);
@@ -93,7 +93,7 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
                 tenantId, "mod_inventory_storage", SERVICE_POINT_TABLE);
         logger.info(String.format("Deleting all service points with query %s",
                 DELETE_ALL_QUERY));
-        pgClient.mutate(DELETE_ALL_QUERY, mutateReply -> {
+        pgClient.execute(DELETE_ALL_QUERY, mutateReply -> {
           if(mutateReply.failed()) {
             String message = logAndSaveError(mutateReply.cause());
             asyncResultHandler.handle(Future.succeededFuture(
@@ -160,8 +160,8 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
     vertxContext.runOnContext(v -> {
       try {
 
-        String validateSvcptResult = validateServicePoint(entity) ;
-        if (validateSvcptResult != null && !validateSvcptResult.isEmpty()){
+        String validateSvcptResult = validateServicePoint(entity);
+        if (validateSvcptResult != null){
           asyncResultHandler.handle(Future.succeededFuture(
             PostServicePointsResponse.respond422WithApplicationJson(
               ValidationHelper.createValidationErrorMessage("name",
@@ -212,43 +212,9 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
           String lang, Map<String, String> okapiHeaders,
           Handler<AsyncResult<Response>> asyncResultHandler,
           Context vertxContext) {
-    vertxContext.runOnContext(v -> {
-      try {
-        String tenantId = getTenant(okapiHeaders);
-        PostgresClient pgClient = getPGClient(vertxContext, tenantId);
-        Criteria idCrit = new Criteria()
-                .addField(ID_FIELD)
-                .setOperation("=")
-                .setValue(servicepointId);
-        pgClient.get(SERVICE_POINT_TABLE, Servicepoint.class,
-                new Criterion(idCrit), true, false, getReply -> {
-          if(getReply.failed()) {
-            String message = logAndSaveError(getReply.cause());
-            asyncResultHandler.handle(Future.succeededFuture(
-                    GetServicePointsByServicepointIdResponse
-                    .respond500WithTextPlain(getErrorResponse(message))));
-          } else {
-            List<Servicepoint> servicepointList = getReply.result().getResults();
-            if(servicepointList.isEmpty()) {
-              asyncResultHandler.handle(Future.succeededFuture(
-                      GetServicePointsByServicepointIdResponse
-                      .respond404WithTextPlain(String.format(
-                      "No service point exists with id '%s'", servicepointId))));
-            } else {
-              Servicepoint servicepoint = servicepointList.get(0);
-              asyncResultHandler.handle(Future.succeededFuture(
-                      GetServicePointsByServicepointIdResponse.respond200WithApplicationJson(
-                      servicepoint)));
-            }
-          }
-        });
-      } catch(Exception e) {
-        String message = logAndSaveError(e);
-        asyncResultHandler.handle(Future.succeededFuture(
-                GetServicePointsByServicepointIdResponse
-                .respond500WithTextPlain(getErrorResponse(message))));
-      }
-    });
+
+    PgUtil.getById(SERVICE_POINT_TABLE, Servicepoint.class, servicepointId, okapiHeaders, vertxContext,
+        GetServicePointsByServicepointIdResponse.class, asyncResultHandler);
   }
 
   @Override
@@ -309,7 +275,7 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
       try {
 
         String validateSvcptResult = validateServicePoint(entity) ;
-        if (validateSvcptResult != null && !validateSvcptResult.isEmpty()){
+        if (validateSvcptResult != null){
           asyncResultHandler.handle(Future.succeededFuture(
             PutServicePointsByServicepointIdResponse
               .respond422WithApplicationJson(ValidationHelper.createValidationErrorMessage("name",
@@ -317,29 +283,9 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
           return;
         }
 
-        String tenantId = getTenant(okapiHeaders);
-        PostgresClient pgClient = getPGClient(vertxContext, tenantId);
-        Criteria idCrit = new Criteria()
-                .addField(ID_FIELD)
-                .setOperation("=")
-                .setValue(servicepointId);
-        pgClient.update(SERVICE_POINT_TABLE, entity, new Criterion(idCrit),
-                false, updateReply -> {
-          if(updateReply.failed()) {
-            String message = logAndSaveError(updateReply.cause());
-            asyncResultHandler.handle(Future.succeededFuture(
-                    PutServicePointsByServicepointIdResponse
-                    .respond500WithTextPlain(getErrorResponse(message))));
-          } else if(updateReply.result().getUpdated() == 0) {
-            asyncResultHandler.handle(Future.succeededFuture(
-                    PutServicePointsByServicepointIdResponse
-                    .respond404WithTextPlain("Not found")));
-          } else {
-            asyncResultHandler.handle(Future.succeededFuture(
-                    PutServicePointsByServicepointIdResponse
-                    .respond204()));
-          }
-        });
+        PgUtil.put(SERVICE_POINT_TABLE, entity, servicepointId, okapiHeaders, vertxContext,
+            PutServicePointsByServicepointIdResponse.class, asyncResultHandler);
+
       } catch(Exception e) {
         String message = logAndSaveError(e);
         asyncResultHandler.handle(Future.succeededFuture(
@@ -349,14 +295,10 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
     });
   }
 
-  public void putServicePoints(Map<String, String> okapiHeaders, Handler<AsyncResult<Response>> asyncResultHandler, Context vertxContext){
-    throw new UnsupportedOperationException();
-  }
-
   private String validateServicePoint(Servicepoint svcpt){
 
     HoldShelfExpiryPeriod holdShelfExpiryPeriod = svcpt.getHoldShelfExpiryPeriod();
-    Boolean pickupLocation = svcpt.getPickupLocation() == null ? false: svcpt.getPickupLocation();
+    Boolean pickupLocation = svcpt.getPickupLocation() == null ? Boolean.FALSE : svcpt.getPickupLocation();
 
     if (!pickupLocation && holdShelfExpiryPeriod != null ) {
       return SERVICE_POINT_CREATE_ERR_MSG_WITHOUT_BEING_PICKUP_LOC;

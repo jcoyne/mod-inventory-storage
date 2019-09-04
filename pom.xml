@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <artifactId>mod-inventory-storage</artifactId>
   <groupId>org.folio</groupId>
-  <version>14.1.0-SNAPSHOT</version>
+  <version>17.0.0-SNAPSHOT</version>
   <licenses>
     <license>
       <name>Apache License 2.0</name>
@@ -43,9 +43,15 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <version>2.23.4</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-unit</artifactId>
-      <version>3.5.3</version>
+      <version>3.5.4</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -54,7 +60,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <ramlfiles_path>${basedir}/ramls/</ramlfiles_path>
-    <raml-module-builder-version>23.1.0</raml-module-builder-version>
+    <raml-module-builder-version>27.0.0</raml-module-builder-version>
     <argLine />
   </properties>
 
@@ -171,11 +177,6 @@
           <verbose>true</verbose>
           <showWeaveInfo>false</showWeaveInfo>
           <complianceLevel>1.8</complianceLevel>
-          <includes>
-            <include>**/impl/*.java</include>
-            <include>**/*.aj</include>
-          </includes>
-          <aspectDirectory>src/main/java/org/folio/rest/annotations</aspectDirectory>
           <XaddSerialVersionUID>true</XaddSerialVersionUID>
           <showWeaveInfo>true</showWeaveInfo>
           <aspectLibraries>
@@ -227,6 +228,54 @@
             </configuration>
           </execution>
           <execution>
+            <id>copy-reference-data</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${basedir}/target/classes/ref-data</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${basedir}/reference-data</directory>
+                  <filtering>true</filtering>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-user-sample-data</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${basedir}/target/classes/sample-data/users</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${basedir}/mod-users/src/main/resources/sample-data/users</directory>
+                  <filtering>true</filtering>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-sample-data</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${basedir}/target/classes/sample-data</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${basedir}/sample-data</directory>
+                  <filtering>true</filtering>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+          <execution>
             <id>filter-descriptor-inputs</id>
             <phase>generate-resources</phase>
             <goals>
@@ -272,8 +321,8 @@
                   <destinationFile>${project.build.directory}/DeploymentDescriptor-environment.json</destinationFile>
                 </fileSet>
                 <fileSet>
-                  <sourceFile>${project.build.directory}/Activate-template.json</sourceFile>
-                  <destinationFile>${project.build.directory}/Activate.json</destinationFile>
+                  <sourceFile>${project.build.directory}/Install-template.json</sourceFile>
+                  <destinationFile>${project.build.directory}/Install.json</destinationFile>
                 </fileSet>
               </fileSets>
             </configuration>

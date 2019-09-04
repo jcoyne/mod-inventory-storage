@@ -61,6 +61,28 @@ To register the module with deployment instructions and activate it for a demo t
 
 To deactivate and unregister the module, run `./stop-managed-demo.sh` from the root directory.
 
+## Tenant Initialization
+
+The module supports v1.2 of the Okapi `_tenant` interface. This version of the interface allows Okapi to pass tenant initialization parameters using the `tenantParameters` key. Currently, the only parameter supported is the `loadReference` key, which will cause the module to load reference data for the tenant if set to `true`. Here is an example of passing the parameter to the module via Okapi's `/_/proxy/tenants/<tenantId>/install` endpoint:
+
+    curl -w '\n' -X POST -d '[ { "id": "mod-inventory-storage-14.1.0", "action": "enable" } ]' http://localhost:9130/_/proxy/tenants/my-test-tenant/install?tenantParameters=loadReference%3Dtrue
+
+This results in a post to the module's `_tenant` API with the following structure:
+
+```json
+{
+  "module_to": "mod-inventory-storage-14.1.0",
+  "parameters": [
+    {
+      "key": "loadReference",
+      "value": "true"
+    }
+  ]
+}
+```
+
+See the section [Install modules per tenant|https://github.com/folio-org/okapi/blob/master/doc/guide.md#install-modules-per-tenant] in the Okapi guide for more information.
+
 ## Sample Data
 
 Importing/ingesting of sample data is done via Okapi, so modules must be registered prior to importing.
@@ -92,10 +114,31 @@ The guide and other [documentation](doc) for this module.
 
 Other [modules](https://dev.folio.org/source-code/#server-side).
 
+Other FOLIO Developer documentation is at [dev.folio.org](https://dev.folio.org/)
+
+### Issue tracker
+
 See project [MODINVSTOR](https://issues.folio.org/browse/MODINVSTOR)
 at the [FOLIO issue tracker](https://dev.folio.org/guidelines/issue-tracker/).
 
-Other FOLIO Developer documentation is at [dev.folio.org](https://dev.folio.org/)
+### ModuleDescriptor
+
+See the built `target/ModuleDescriptor.json` for the interfaces that this module
+requires and provides, the permissions, and the additional module metadata.
+
+### API documentation
+
+This module's [API documentation](https://dev.folio.org/reference/api/#mod-inventory-storage).
+
+### Code analysis
+
+[SonarQube analysis](https://sonarcloud.io/dashboard?id=org.folio%3Amod-inventory-storage).
+
+### Download and configuration
+
+The built artifacts for this module are available.
+See [configuration](https://dev.folio.org/download/artifacts) for repository access,
+and the [Docker image](https://hub.docker.com/r/folioorg/mod-inventory-storage/).
 
 # Appendix 1 - Docker Information
 
@@ -116,3 +159,24 @@ If these methods don't work for you, please do get in touch, so this section can
 On Linux, `ifconfig docker0 | grep 'inet addr:'` should give output similar to `inet addr:192.168.X.X  Bcast:0.0.0.0  Mask:255.255.0.0`, , the first IP address is usually routable from within containers.
 
 On Mac OS X (using Docker Native), `ifconfig en0 | grep 'inet '` should give output similar to `inet 192.168.X.X netmask 0xffffff00 broadcast 192.168.X.X`, the first IP address is usually routable from within containers.
+
+# Batch interface
+
+Batch interface was introduced for processing a collection of entities in bulk. It is not transactional, each entity is processed separately, response contains combined results of processing.
+
+###Design for batch save Instances endpoint
+_Method_: POST
+
+_Resource_: /instance-storage/batch/instances (interface "instance-storage-batch")
+
+_Body_: collection of Instances and total number of Instances
+
+_Returns_: collection of successfully created Instances, error messages for failure Instances, total number of created Instances:
+
+- If at least one Instance is successfully saved - returns 201 response with saved instances ("instances" section), "errorMessages" array contains errors for failed Instances (empty if all Instances are successfully saved).
+
+- If save for all Instances failed - returns 500 response with "errorMessages" array, explaining a reason of why Instances were processed with failures (one error message per one Instance). Instances array is empty.
+
+Regardless the batch size, number of parallel connections to the db is limited to 4 by default. To override the default number of concurrent db connections - "inventory.storage.parallel.db.connections.limit" program argument should be specified on module deployment.
+
+`java -Dport=%p -jar ../mod-source-record-storage/mod-source-record-storage-server/target/mod-source-record-storage-server-fat.jar -Dhttp.port=%p embed_postgres=true inventory.storage.parallel.db.connections.limit=10`

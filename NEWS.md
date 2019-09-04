@@ -1,8 +1,73 @@
-## 14.1.0 Unreleased
+## 16.0.0 2019-07-23
 
-* Provides `item-storage` interface version 7.1 (MODINVSTOR-249)
+* Provides `instance-note-types` interface version 1.0 (MODINVSTOR-300)
+* Provides `instance-storage` interface version 7.0 (MODINVSTOR-312,MODINVSTOR-297)
+* Provides `nature-of-content-terms` interface version 1.0 (MODINVSTOR-309)
+* Provides `item-storage` interface version 7.4 (MODINVSTOR-310)
+* Provides `identifier-types` interface version 1.2 (MODINVSTOR-305)
+* Provides `classification-types` interface version 1.2 (MODINVSTOR-306)
+* Provides `modes-of-issuance` interface version 1.1 (MODINVSTOR-307)
+* Changes structure of instance.notes (MODINVSTOR-312)
+* Adds date and source fields to circulation notes (MODINVSTOR-310)
+* Validates UUID properties with pattern (MODINVSTOR-297)
+* Adds property `source` to identifier type, classification type, mode of issuance (MODINVSTOR-305, MODINVSTOR-306, MODINVSTOR-307)
+* Sets array modifiers for contributors, identifiers (MODINVSTOR-311)
+* Populate identifiers reference table with more identifiers (MODINVSTOR-313)
+* Aligns barcode index (on `item`) with the SQL generated
+* Upgrades RAML Module Builder to version 26.2.2 (MODINVSTOR-285)
+* Improves test coverage, error logging, sample data.
+
+## 15.5.1 2019-06-09
+
+* Performance improvement (MODINVSTOR-255)
+* Bug fix (MODINVSTOR-289)
+
+## 15.4.0 2019-05-08
+
+* Upgrades RAML Module Builder to version 24.0.0 and aligns MODINVSTOR-278
+* Adds reference data for locations, location units, service points MODINVSTOR 279
+
+## 15.3.1 2019-03-23
+
+* Align sample data cross-module: Item statuses to match loan samples in circulation
+
+## 15.3.0 2019-03-15
+
+* Remove branch tag for mod-users submodule
+
+## 15.2.0 2019-03-15
+
+* Provides service point users sample data (MODINVSTOR-270)
+* Loads sample data with `loadSample` (MODINVSTOR-264)
+* Performance optimization, search by barcode (MODINVSTOR-269)
+* Makes sample service points available for pickup (MODINVSTOR-268)
+
+## 15.1.0 2019-02-19
+
+* Provides `item-storage` interface version 7.3 (MODINVSTOR-252)
+* Provides `service-points` interface version 3.2 (MODINVSTOR-251)
+* Adds `holdShelfExpiryPeriod` to `servicepoint` schema (MODINVSTOR-251)
+* Adds `status.date` to `item` schema (MODINVSTOR-252)
+* Improves performance:
+*   Fixes slow identifier search (MODINVSTOR-266)
+*   Use sort or search index depending on result size (MODINVSTOR-215)
+* Adds update of reference data on module upgrade (MODINVSTOR-263)
+* Bugfix: No longer supports <> relation for ID properties (MODINVSTOR-267)
+
+## 15.0.0 2019-02-01
+
+* Provides `service-points` interface version 3.1 (MODINVSTOR-235)
+* Provides `item-storage` interface version 7.2 (MODINVSTOR-249)
+* Adds `staffSlips` to `servicepoint` schema (MODINVSTOR-235)
+* Adds property `ServicePoint.printByDefault` (MODINVSTOR-235)
 * Adds `circulationNotes` to `item` schema (MODINVSTOR-249)
-* Adds holdShelfExpiryPeriod to servicepoint schema (MODINVSTOR-251)
+* Adds sequences for generating human readable identifiers (MODINVSTOR-170)
+* Improves performance for items by barcode (MODINVSTOR-247)
+* Improves performance for items queried by ID (MODINVSTOR-248)
+* Improves performance for PUT of `Instance` (MODINVSTOR-254)
+* Adds property `Item.purchaseOrderLineIdentifier` (MODINVSTOR-245)
+* Miscellaneous bug-fixes (MODINVSTOR-253, MODINVSTOR-243)
+
 
 ## 14.0.0 2018-11-30
 

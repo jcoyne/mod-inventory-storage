@@ -1,11 +1,9 @@
 package org.folio.rest.impl;
 
 import java.lang.invoke.MethodHandles;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
 import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
@@ -13,6 +11,7 @@ import javax.validation.constraints.Pattern;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.core.Response;
 
+import org.folio.cql2pgjson.CQL2PgJSON;
 import org.folio.rest.jaxrs.model.Instance;
 import org.folio.rest.jaxrs.model.InstanceRelationship;
 import org.folio.rest.jaxrs.model.InstanceRelationships;
@@ -20,17 +19,15 @@ import org.folio.rest.jaxrs.model.Instances;
 import org.folio.rest.jaxrs.model.MarcJson;
 import org.folio.rest.jaxrs.resource.InstanceStorage;
 import org.folio.rest.persist.PgExceptionUtil;
+import org.folio.rest.persist.PgUtil;
 import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.persist.Criteria.Limit;
 import org.folio.rest.persist.Criteria.Offset;
 import org.folio.rest.persist.cql.CQLWrapper;
 import org.folio.rest.tools.messages.MessageConsts;
 import org.folio.rest.tools.messages.Messages;
-import org.folio.rest.tools.utils.OutStream;
 import org.folio.rest.tools.utils.TenantTool;
-import org.z3950.zing.cql.cql2pgjson.CQL2PgJSON;
-import org.z3950.zing.cql.cql2pgjson.FieldException;
-
+import org.folio.cql2pgjson.exception.FieldException;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
@@ -46,59 +43,22 @@ public class InstanceStorageAPI implements InstanceStorage {
   // lower case headers
   private static final String TENANT_HEADER = "x-okapi-tenant";
   public static final String MODULE = "mod_inventory_storage";
-  public static final String INSTANCE_HOLDINGS_VIEW = "instance_holding_view";
-  public static final String INSTANCE_HOLDINGS_ITEMS_VIEW = "instance_holding_item_view";
   public static final String INSTANCE_TABLE =  "instance";
   private static final String INSTANCE_SOURCE_MARC_TABLE = "instance_source_marc";
   private static final String INSTANCE_RELATIONSHIP_TABLE = "instance_relationship";
   private final Messages messages = Messages.getInstance();
 
   PreparedCQL handleCQL(String query, int limit, int offset) throws FieldException {
-    boolean containsHoldingsRecordProperties = query != null && query.contains("holdingsRecords.");
-    boolean containsItemsRecordProperties = query != null && query.contains("item.");
-
-    if(containsItemsRecordProperties && containsHoldingsRecordProperties) {
-      //it_jsonb is the alias given items in the view in the DB
-      query = query.replaceAll("item\\.", INSTANCE_HOLDINGS_ITEMS_VIEW+".it_jsonb.");
-
-      //ho_jsonb is the alias given holdings in the view in the DB
-      query = query.replaceAll("holdingsRecords\\.", INSTANCE_HOLDINGS_ITEMS_VIEW+".ho_jsonb.");
-
-      return new PreparedCQL(INSTANCE_HOLDINGS_ITEMS_VIEW, createCQLWrapper(query, limit, offset, Arrays.asList(
-        INSTANCE_HOLDINGS_ITEMS_VIEW + ".jsonb",
-        INSTANCE_HOLDINGS_ITEMS_VIEW + ".it_jsonb",
-          INSTANCE_HOLDINGS_ITEMS_VIEW + ".ho_jsonb")));
-    }
-
-    if(containsItemsRecordProperties) {
-      //it_jsonb is the alias given items in the view in the DB
-      query = query.replaceAll("item\\.", INSTANCE_HOLDINGS_ITEMS_VIEW+".it_jsonb.");
-
-      return new PreparedCQL(INSTANCE_HOLDINGS_ITEMS_VIEW, createCQLWrapper(query, limit, offset, Arrays.asList(
-        INSTANCE_HOLDINGS_ITEMS_VIEW + ".jsonb",
-          INSTANCE_HOLDINGS_ITEMS_VIEW + ".it_jsonb")));
-    }
-
-    if(containsHoldingsRecordProperties) {
-      //ho_jsonb is the alias given holdings in the view in the DB
-      query = query.replaceAll("holdingsRecords\\.", INSTANCE_HOLDINGS_VIEW+".ho_jsonb.");
-
-      return new PreparedCQL(INSTANCE_HOLDINGS_VIEW, createCQLWrapper(query, limit, offset, Arrays.asList(
-        INSTANCE_HOLDINGS_VIEW+".jsonb",
-          INSTANCE_HOLDINGS_VIEW + ".ho_jsonb")));
-    }
-
-    return new PreparedCQL(INSTANCE_TABLE,
-        createCQLWrapper(query, limit, offset, Arrays.asList(INSTANCE_TABLE + ".jsonb")));
+    return new PreparedCQL(INSTANCE_TABLE, query, limit, offset);
   }
 
-  private CQLWrapper createCQLWrapper(
+  private static CQLWrapper createCQLWrapper(
     String query,
     int limit,
     int offset,
-    List<String> fields) throws FieldException {
-
-    CQL2PgJSON cql2pgJson = new CQL2PgJSON(fields);
+    String tableName) throws FieldException {
+    
+    CQL2PgJSON cql2pgJson = new CQL2PgJSON(tableName + ".jsonb");
 
     return new CQLWrapper(cql2pgJson, query)
       .setLimit(new Limit(limit))
@@ -115,56 +75,13 @@ public class InstanceStorageAPI implements InstanceStorage {
     Handler<AsyncResult<Response>> asyncResultHandler,
     Context vertxContext) {
 
-    String tenantId = okapiHeaders.get(TENANT_HEADER);
-
     try {
-      vertxContext.runOnContext(v -> {
-        try {
-          PostgresClient postgresClient = PostgresClient.getInstance(
-            vertxContext.owner(), TenantTool.calculateTenantId(tenantId));
-
-          String[] fieldList = {"*"};
-
-                PreparedCQL preparedCql = handleCQL(query, limit, offset);
-          CQLWrapper cql = preparedCql.getCqlWrapper();
-
-          log.info(String.format("SQL generated from CQL: %s", cql.toString()));
-
-          postgresClient.get(preparedCql.getTableName(), Instance.class, fieldList, cql,
-            true, false, reply -> {
-              try {
-                if(reply.succeeded()) {
-                  List<Instance> instances = reply.result().getResults();
-
-                  Instances instanceList = new Instances();
-                  instanceList.setInstances(instances);
-                  instanceList.setTotalRecords(reply.result().getResultInfo().getTotalRecords());
-
-                  asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
-                    GetInstanceStorageInstancesResponse.
-                      respond200WithApplicationJson(instanceList)));
-                }
-                else {
-                  asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
-                    GetInstanceStorageInstancesResponse.
-                      respond500WithTextPlain(reply.cause().getMessage())));
-                }
-              } catch (Exception e) {
-                log.error(e.getStackTrace());
-                asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
-                  GetInstanceStorageInstancesResponse.
-                    respond500WithTextPlain(e.getMessage())));
-              }
-            });
-        } catch (Exception e) {
-          log.error(e.getStackTrace());
-          asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
-            GetInstanceStorageInstancesResponse.
-              respond500WithTextPlain(e.getMessage())));
-        }
-      });
+      PreparedCQL preparedCql = handleCQL(query, limit, offset);
+      PgUtil.getWithOptimizedSql(preparedCql.getTableName(), Instance.class, Instances.class,
+        "title", query, offset, limit,
+        okapiHeaders, vertxContext, GetInstanceStorageInstancesResponse.class, asyncResultHandler);
     } catch (Exception e) {
-      log.error(e.getStackTrace());
+      log.error(e.getMessage(), e);
       asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
         GetInstanceStorageInstancesResponse.
           respond500WithTextPlain(e.getMessage())));
@@ -217,7 +134,7 @@ public class InstanceStorageAPI implements InstanceStorage {
                         .respond400WithTextPlain(reply.cause().getMessage())));
                 }
               } catch (Exception e) {
-                log.error(e.getStackTrace());
+                log.error(e.getMessage(), e);
                 asyncResultHandler.handle(
                   io.vertx.core.Future.succeededFuture(
                     PostInstanceStorageInstancesResponse
@@ -225,14 +142,14 @@ public class InstanceStorageAPI implements InstanceStorage {
               }
             });
         } catch (Exception e) {
-          log.error(e.getStackTrace());
+          log.error(e.getMessage(), e);
           asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
             PostInstanceStorageInstancesResponse
               .respond500WithTextPlain(e.getMessage())));
         }
       });
     } catch (Exception e) {
-      log.error(e.getStackTrace());
+      log.error(e.getMessage(), e);
       asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
         PostInstanceStorageInstancesResponse
           .respond500WithTextPlain(e.getMessage())));
@@ -253,7 +170,7 @@ public class InstanceStorageAPI implements InstanceStorage {
         PostgresClient postgresClient = PostgresClient.getInstance(
           vertxContext.owner(), TenantTool.calculateTenantId(tenantId));
 
-        postgresClient.mutate(String.format("DELETE FROM "
+        postgresClient.execute(String.format("DELETE FROM "
               + tenantId + "_" + MODULE + "." + INSTANCE_SOURCE_MARC_TABLE ),
             reply1 -> {
               if (! reply1.succeeded()) {
@@ -262,7 +179,7 @@ public class InstanceStorageAPI implements InstanceStorage {
                     .respond500WithTextPlain(reply1.cause().getMessage())));
                 return;
               }
-              postgresClient.mutate(String.format("DELETE FROM "
+              postgresClient.execute(String.format("DELETE FROM "
                + tenantId + "_" + MODULE + "." + INSTANCE_RELATIONSHIP_TABLE),
               reply2 -> {
                 if (! reply2.succeeded()) {
@@ -271,7 +188,7 @@ public class InstanceStorageAPI implements InstanceStorage {
                       .respond500WithTextPlain(reply1.cause().getMessage())));
                   return;
                 }
-                postgresClient.mutate("DELETE FROM "
+                postgresClient.execute("DELETE FROM "
                   + tenantId + "_" + MODULE + "." + INSTANCE_TABLE, reply3 -> {
                   if (! reply3.succeeded()) {
                     asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
@@ -345,21 +262,21 @@ public class InstanceStorageAPI implements InstanceStorage {
 
                 }
               } catch (Exception e) {
-                log.error(e.getStackTrace());
+                log.error(e.getMessage(), e);
                 asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
                   GetInstanceStorageInstancesByInstanceIdResponse.
                     respond500WithTextPlain(e.getMessage())));
               }
             });
         } catch (Exception e) {
-          log.error(e.getStackTrace());
+          log.error(e.getMessage(), e);
           asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
             GetInstanceStorageInstancesByInstanceIdResponse.
               respond500WithTextPlain(e.getMessage())));
         }
       });
     } catch (Exception e) {
-      log.error(e.getStackTrace());
+      log.error(e.getMessage(), e);
       asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
         GetInstanceStorageInstancesByInstanceIdResponse.
           respond500WithTextPlain(e.getMessage())));
@@ -410,116 +327,8 @@ public class InstanceStorageAPI implements InstanceStorage {
     Handler<AsyncResult<Response>> asyncResultHandler,
     Context vertxContext) {
 
-    String tenantId = okapiHeaders.get(TENANT_HEADER);
-
-    try {
-      PostgresClient postgresClient =
-        PostgresClient.getInstance(
-          vertxContext.owner(), TenantTool.calculateTenantId(tenantId));
-
-      vertxContext.runOnContext(v -> {
-        try {
-          String[] fieldList = {"*"};
-
-          PreparedCQL preparedCql = handleCQL(String.format("id==%s", instanceId), 1, 0);
-          CQLWrapper cql = preparedCql.getCqlWrapper();
-
-          postgresClient.get(preparedCql.getTableName(), Instance.class, fieldList, cql, true, false,
-            reply -> {
-              if(reply.succeeded()) {
-                List<Instance> instancesList = reply.result().getResults();
-
-                if (instancesList.size() == 1) {
-                  try {
-                      postgresClient.update(preparedCql.getTableName(), entity, entity.getId(),
-                      update -> {
-                        try {
-                          if(update.succeeded()) {
-                            OutStream stream = new OutStream();
-                            stream.setData(entity);
-
-                            asyncResultHandler.handle(
-                              Future.succeededFuture(
-                                PutInstanceStorageInstancesByInstanceIdResponse
-                                  .respond204()));
-                          }
-                          else {
-                            asyncResultHandler.handle(
-                              Future.succeededFuture(
-                                PutInstanceStorageInstancesByInstanceIdResponse
-                                  .respond500WithTextPlain(
-                                    update.cause().getMessage())));
-                          }
-                        } catch (Exception e) {
-                          asyncResultHandler.handle(
-                            Future.succeededFuture(
-                              PutInstanceStorageInstancesByInstanceIdResponse
-                                .respond500WithTextPlain(e.getMessage())));
-                        }
-                      });
-                  } catch (Exception e) {
-                    asyncResultHandler.handle(Future.succeededFuture(
-                      PutInstanceStorageInstancesByInstanceIdResponse
-                        .respond500WithTextPlain(e.getMessage())));
-                  }
-              }
-              else {
-                try {
-                      postgresClient.save(preparedCql.getTableName(), entity.getId(), entity,
-                    save -> {
-                      try {
-                        if(save.succeeded()) {
-                          OutStream stream = new OutStream();
-                          stream.setData(entity);
-
-                          asyncResultHandler.handle(
-                            Future.succeededFuture(
-                              PutInstanceStorageInstancesByInstanceIdResponse
-                                .respond204()));
-                        }
-                        else {
-                          asyncResultHandler.handle(
-                            Future.succeededFuture(
-                              PutInstanceStorageInstancesByInstanceIdResponse
-                                .respond500WithTextPlain(
-                                  save.cause().getMessage())));
-                        }
-                      } catch (Exception e) {
-                        asyncResultHandler.handle(
-                          Future.succeededFuture(
-                            PutInstanceStorageInstancesByInstanceIdResponse
-                              .respond500WithTextPlain(e.getMessage())));
-                      }
-                    });
-                } catch (Exception e) {
-                  asyncResultHandler.handle(Future.succeededFuture(
-                    PutInstanceStorageInstancesByInstanceIdResponse
-                      .respond500WithTextPlain(e.getMessage())));
-                }
-              }
-            } else {
-                asyncResultHandler.handle(Future.succeededFuture(
-                  PutInstanceStorageInstancesByInstanceIdResponse
-                    .respond500WithTextPlain(reply.cause().getMessage())));
-            }
-          });
-        } catch (Exception e) {
-          asyncResultHandler.handle(Future.succeededFuture(
-            PutInstanceStorageInstancesByInstanceIdResponse
-              .respond500WithTextPlain(e.getMessage())));
-        }
-      });
-    } catch (Exception e) {
-      asyncResultHandler.handle(Future.succeededFuture(
-        PutInstanceStorageInstancesByInstanceIdResponse
-          .respond500WithTextPlain(e.getMessage())));
-    }
-  }
-
-  private void badRequestResult(
-    Handler<AsyncResult<Response>> asyncResultHandler, String message) {
-    asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
-      GetInstanceStorageInstancesResponse.respond400WithTextPlain(message)));
+    PgUtil.put(INSTANCE_TABLE, entity, instanceId, okapiHeaders, vertxContext,
+        PutInstanceStorageInstancesByInstanceIdResponse.class, asyncResultHandler);
   }
 
   private boolean isUUID(String id) {
@@ -541,19 +350,8 @@ public class InstanceStorageAPI implements InstanceStorage {
       Handler<AsyncResult<Response>> asyncResultHandler,
       Context vertxContext) {
 
-    PostgresClient postgresClient =
-        PostgresClient.getInstance(vertxContext.owner(), TenantTool.tenantId(okapiHeaders));
-    postgresClient.delete(INSTANCE_SOURCE_MARC_TABLE, instanceId, reply -> {
-      if (! reply.succeeded()) {
-        asyncResultHandler.handle(Future.succeededFuture(
-          DeleteInstanceStorageInstancesSourceRecordByInstanceIdResponse
-            .respond500WithTextPlain(reply.cause().getMessage())));
-        return;
-      }
-
-      asyncResultHandler.handle(Future.succeededFuture(
-          DeleteInstanceStorageInstancesSourceRecordByInstanceIdResponse.respond204()));
-    });
+    PgUtil.deleteById(INSTANCE_SOURCE_MARC_TABLE, instanceId, okapiHeaders, vertxContext,
+        DeleteInstanceStorageInstancesSourceRecordByInstanceIdResponse.class, asyncResultHandler);
   }
 
   @Override
@@ -564,7 +362,7 @@ public class InstanceStorageAPI implements InstanceStorage {
     PostgresClient postgresClient =
         PostgresClient.getInstance(vertxContext.owner(), TenantTool.tenantId(okapiHeaders));
 
-    String where = "WHERE _id='" + instanceId + "'";
+    String where = "WHERE id='" + instanceId + "'";
     postgresClient.get(INSTANCE_SOURCE_MARC_TABLE, MarcJson.class, where, false, false, reply -> {
       if (! reply.succeeded()) {
         asyncResultHandler.handle(Future.succeededFuture(
@@ -600,19 +398,8 @@ public class InstanceStorageAPI implements InstanceStorage {
       Handler<AsyncResult<Response>> asyncResultHandler,
       Context vertxContext) {
 
-    PostgresClient postgresClient =
-        PostgresClient.getInstance(vertxContext.owner(), TenantTool.tenantId(okapiHeaders));
-
-    postgresClient.delete(INSTANCE_SOURCE_MARC_TABLE, instanceId, reply -> {
-      if (! reply.succeeded()) {
-        asyncResultHandler.handle(Future.succeededFuture(
-          DeleteInstanceStorageInstancesSourceRecordMarcJsonByInstanceIdResponse
-            .respond500WithTextPlain(reply.cause().getMessage())));
-        return;
-      }
-      asyncResultHandler.handle(Future.succeededFuture(
-          DeleteInstanceStorageInstancesSourceRecordMarcJsonByInstanceIdResponse.respond204()));
-    });
+    PgUtil.deleteById(INSTANCE_SOURCE_MARC_TABLE, instanceId, okapiHeaders, vertxContext,
+        DeleteInstanceStorageInstancesSourceRecordMarcJsonByInstanceIdResponse.class, asyncResultHandler);
   }
 
   @Override
@@ -683,7 +470,7 @@ public class InstanceStorageAPI implements InstanceStorage {
 
           String[] fieldList = {"*"};
 
-          CQLWrapper cql = createCQLWrapper(query, limit, offset, Arrays.asList(INSTANCE_RELATIONSHIP_TABLE+".jsonb"));
+          CQLWrapper cql = createCQLWrapper(query, limit, offset, INSTANCE_RELATIONSHIP_TABLE);
 
           log.info(String.format("SQL generated from CQL: %s", cql.toString()));
 
@@ -706,21 +493,21 @@ public class InstanceStorageAPI implements InstanceStorage {
                       respond500WithTextPlain(reply.cause().getMessage())));
                 }
               } catch (Exception e) {
-                log.error(e.getStackTrace());
+                log.error(e.getMessage(), e);
                 asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
                   GetInstanceStorageInstanceRelationshipsResponse.
                     respond500WithTextPlain(e.getMessage())));
               }
             });
         } catch (Exception e) {
-          log.error(e.getStackTrace());
+          log.error(e.getMessage(), e);
           asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
             GetInstanceStorageInstanceRelationshipsResponse.
               respond500WithTextPlain(e.getMessage())));
         }
       });
     } catch (Exception e) {
-      log.error(e.getStackTrace());
+      log.error(e.getMessage(), e);
       asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
         GetInstanceStorageInstanceRelationshipsResponse.
           respond500WithTextPlain(e.getMessage())));
@@ -729,53 +516,8 @@ public class InstanceStorageAPI implements InstanceStorage {
 
   @Override
   public void postInstanceStorageInstanceRelationships(String lang, InstanceRelationship entity, Map<String, String> okapiHeaders, Handler<AsyncResult<Response>> asyncResultHandler, Context vertxContext) {
-    try {
-      PostgresClient postgresClient =
-        PostgresClient.getInstance(vertxContext.owner(), TenantTool.tenantId(okapiHeaders));
-
-      vertxContext.runOnContext(v -> {
-        try {
-
-          postgresClient.save(INSTANCE_RELATIONSHIP_TABLE, entity.getId(), entity,
-            reply -> {
-              try {
-                if(reply.succeeded()) {
-                  OutStream stream = new OutStream();
-                  stream.setData(entity);
-
-                  asyncResultHandler.handle(
-                    io.vertx.core.Future.succeededFuture(
-                      PostInstanceStorageInstanceRelationshipsResponse
-                        .respond201WithApplicationJson(entity,
-                          PostInstanceStorageInstanceRelationshipsResponse.headersFor201().withLocation(reply.result()))));
-                }
-                else {
-                  asyncResultHandler.handle(
-                    io.vertx.core.Future.succeededFuture(
-                      PostInstanceStorageInstanceRelationshipsResponse
-                        .respond400WithTextPlain(reply.cause().getMessage())));
-                }
-              } catch (Exception e) {
-                log.error(e.getStackTrace());
-                asyncResultHandler.handle(
-                  io.vertx.core.Future.succeededFuture(
-                    PostInstanceStorageInstanceRelationshipsResponse
-                      .respond500WithTextPlain(e.getMessage())));
-              }
-            });
-        } catch (Exception e) {
-          log.error(e.getStackTrace());
-          asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
-            PostInstanceStorageInstanceRelationshipsResponse
-              .respond500WithTextPlain(e.getMessage())));
-        }
-      });
-    } catch (Exception e) {
-      log.error(e.getStackTrace());
-      asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
-        PostInstanceStorageInstanceRelationshipsResponse
-          .respond500WithTextPlain(e.getMessage())));
-    }
+    PgUtil.post(INSTANCE_RELATIONSHIP_TABLE, entity, okapiHeaders, vertxContext,
+        PostInstanceStorageInstanceRelationshipsResponse.class, asyncResultHandler);
   }
 
   @Override
@@ -843,13 +585,14 @@ public class InstanceStorageAPI implements InstanceStorage {
     });
   }
 
-  class PreparedCQL {
+  static class PreparedCQL {
     private final String tableName;
     private final CQLWrapper cqlWrapper;
 
-    public PreparedCQL(String tableName, CQLWrapper cqlWrapper) {
+    public PreparedCQL(String tableName, String query, int limit, int offset)
+        throws FieldException {
       this.tableName = tableName;
-      this.cqlWrapper = cqlWrapper;
+      this.cqlWrapper = createCQLWrapper(query, limit, offset, tableName);
     }
 
     public String getTableName() {
@@ -859,7 +602,6 @@ public class InstanceStorageAPI implements InstanceStorage {
     public CQLWrapper getCqlWrapper() {
       return cqlWrapper;
     }
-
   }
 
 }

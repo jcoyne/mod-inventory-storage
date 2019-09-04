@@ -39,7 +39,7 @@
         "properties": {
           "uri": {
             "type": "string",
-            "description": "uniform resource identifier (URI) is a string of characters designed for unambiguous identification of resources"
+            "description": "uniform resource identifier (URI) is a string of characters designed for unambiguous identification of resources"
           },
           "linkText": {
             "type": "string",
@@ -66,7 +66,7 @@
     },
     "callNumberTypeId": {
       "type": "string",
-      "description": "unique ID for the type of call number on a holdings record, a UUID" 
+      "description": "unique ID for the type of call number on a holdings record, a UUID"
     },
     "callNumberPrefix": {
       "type": "string"
@@ -91,17 +91,21 @@
     },
     "notes": {
       "type": "array",
+      "description": "Notes about action, copy, binding etc.",
       "items": {
         "type": "object",
         "properties": {
           "holdingsNoteTypeId": {
-            "type": "string"
+            "type": "string",
+            "description": "ID of the type of note"
           },
           "note": {
-            "type": "string"
+            "type": "string",
+            "description": "Text content of the note"
           },
           "staffOnly": {
             "type": "boolean",
+            "description": "If true, determines that the note should not be visible for others than staff",
             "default": false
           }
         }
@@ -231,6 +235,12 @@
       "folio:linkFromField": "instanceId",
       "folio:linkToField": "id",
       "folio:includedElement": "instances.0"
+    },
+    "tags": {
+      "description": "arbitrary tags associated with this holding",
+      "id": "tags",
+      "type": "object",
+      "$ref": "raml-util/schemas/tags.schema"
     },
     "metadata": {
       "type": "object",
