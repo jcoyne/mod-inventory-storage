@@ -1,3 +1,98 @@
+## 19.1.0 2020-03-14
+
+* Improves performance of `keyword` search (MODINVSTOR-455)
+* Upgrades to RAML Module Builder 29.3.1
+
+## 19.0.0 2020-03-09
+
+* Restricts item statuses (MODINVSTOR-283, MODINVSTOR-416)
+* Introduces `Claimed returned` item status (MODINVSTOR-433)
+* Makes item status required (MODINVSTOR-425, MODINVSTOR-416)
+* Makes item status date read-only (MODINVSTOR-392, MODINVSTOR-416)
+* Allows only one copy number for an item (MODINVSTOR-332, MODINVSTOR-416)
+* Stores effective call number type for item (MODINVSTOR-361)
+* Introduces preceding and succeeding titles (MODINVSTOR-441, MODINVSTOR-447)
+* Changes reference mode of issuances (MODINVSTOR-431)
+* Streams responses when getting items, holdings and instances (MODINVSTOR-438)
+* Provides an API to get only `id` property of all records matching a CQL query (MODINVSTOR-439)
+* Provides access to the JSON schemas used by the module (MODINVSTOR-404)
+* Defaults suppress from discovery to false (MODINVSTOR-447)
+* Adds foreign key constraint for effective location (MODINVSTOR-407)
+* Adds indexes for `call number` and `accession number`  (MODINVSTOR-435, MODINVSTOR-444)
+* Ensures update triggers run in the correct order (MODINVSTOR-415)
+* Upgrades to RAML Module Builder 29.3.0 (MODINVSTOR-139, MODINVSTOR-379, MODINVSTOR-405. MODINVSTOR-418. MODINVSTOR-429, MODINVSTOR-430)
+* Provides `item-storage 8.2`
+* Provides `item-storage-batch-sync 0.3`
+* Provides `holdings-storage 4.1`
+* Provides `instance-storage 7.4`
+* Provides `instance-storage-batch-sync 0.2`
+* Provides `instance-bulk 0.1`
+* Provides `instance-preceeding-succeeding-titles 0.1`
+* Provides `_jsonSchemas 1.0`
+
+## 18.2.0 2019-12-20
+
+* Increase maximum number of digits for human readable IDs (HRID) (MODINVSTOR-410, MODINVSTOR-411, MODINVSTOR-412)
+* Include HRID in sample records for instances, items and holdings (MODINVSTOR-397)
+* Improve performance of searching by effective location (MODINVSTOR-407, MODINVSTOR-409)
+
+
+## 18.1.0 2019-12-06
+
+* Upgrades RAML Module Builder (RMB) to version [29.1.0](https://github.com/folio-org/raml-module-builder/blob/v29.1.0/NEWS.md) (was 28.1.0) ([MODINVSTOR-403](https://issues.folio.org/browse/MODINVSTOR-403))
+
+Most notable RAML Module Builder changes:
+* Estimate hit counts [(RMB-506](https://issues.folio.org/browse/RMB-506))
+* Bugfix that break clients that do not comply with the interface spec: POST /\_/tenant requires JSON body with module_to ([RMB-510](https://issues.folio.org/browse/RMB-510))
+
+## 18.0.0 2019-11-29
+
+* Generates `HRID`s for `instance`, `holdings` and `item` records (MODINVSTOR-363, MODINVSTOR-373, MODINVSTOR-374, MODINVSTOR-375)
+* Derives `effective location` for `item` records (MODINVSTOR-348)
+* Derives `effective call number, suffix and prefix` for `item` records (MODINVSTOR-357, MODINVSTOR-358, MODINVSTOR-360, MODINVSTOR-391)
+* Introduces `keyword` CQL index for `instance` records (MODINVSTOR-349)
+* Introduces `last check in date` property  for `item` records (MODINVSTOR-386)
+* Introduces `preceding-succeeding` instance relationship (MODINVSTOR-343)
+* Introduces `Uniform title` alternative title type  (MODINVSTOR-350)
+* Introduces `LC (local)` and `SUDOC` classification types  (MODINVSTOR-351)
+* Sample `instance` records now use  `FOLIO` as the `source`  property (MODINVSTOR-337)
+* Makes `permanent location` a required property for `holdings` (MODINVSTOR-364)
+* Makes `code` a required properties for `institution`, `campus` and `library` location units (MODINVSTOR-315)
+* Applies stricter validation on UUID properties in `instance` and `holdings` records (MODINVSTOR-297, MODINVSTOR-370)
+* Introduces synchronous batch APIs for `items`, `holdings` and `instances` (MODINVSTOR-353)
+* Upgrades RAML Module Builder to version 27.0.0 (MODINVSTOR-368, MODINVSTOR-383, MODINVSTOR-385)
+* Generates  `metadata` property for instances created using batch API (MODINVSTOR-387)
+* Fixes bug with `item status date` being changed even when status has not changed (MODINVSTOR-376)
+* Fixes bug with `instance status date` not being set when status changes (MODINVSTOR-367)
+* Changes container memory management (MODINVSTOR-396, FOLIO-2358)
+* Provides `item-storage 7.8`
+* Provides `holdings-storage 4.0`
+* Provides `location-units 2.0`
+* Provides `hrid-settings-storage 1.0`
+* Provides `item-storage-batch-sync 0.1`
+* Provides `holdings-storage-batch-sync 0.1`
+* Provides `instance-storage-batch-sync 0.1`
+
+## 17.0.0 2019-09-09
+
+* Adds tags to `items records` (MODINVSTOR-322)
+* Adds tags to `holdings records` (MODINVSTOR-324)
+* Adds tags to `instances` (MODINVSTOR-323)
+* Adds nature of content terms to `instances` (MODINVSTOR-327)
+* Introduces `item damaged statuses` (MODINVSTOR-286)
+* Introduces preview `instance storage batch` API (MODINVSTOR-291)
+* Limits number of database connections when processing instance batches (MODINVSTOR-330)
+* Disallows deletion of in use `instance types` (MODINVSTOR-301)
+* Disallows creation of `holdings type` with existing name (MODINVSTOR-318)
+* Fixes failures when combining CQL array index and other indexes (MODINVSTOR-319)
+* Use sub-queries rather than views for cross-record searching (MODINVSTOR-339, MODINVSTOR-347)
+* Provides `item-storage` interface version 7.5 (MODINVSTOR-322)
+* Provides `holdings-storage` interface version 3.1 (MODINVSTOR-324)
+* Provides `instance-storage` interface version 7.2 (MODINVSTOR-323, MODINVSTOR-327)
+* Provides `instance-storage-batch` interface version 0.2 (MODINVSTOR-291)
+* Provides `item-damaged-statuses` interface version 1.0 (MODINVSTOR-286)
+* Upgrades RAML Module Builder to version 27.0.0 (MODINVSTOR-342)
+
 ## 16.0.0 2019-07-23
 
 * Provides `instance-note-types` interface version 1.0 (MODINVSTOR-300)

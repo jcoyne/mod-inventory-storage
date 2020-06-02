@@ -7,6 +7,7 @@ import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonObject;
+
 import org.folio.rest.support.*;
 import org.folio.rest.support.client.LoanTypesClient;
 import org.junit.Assert;
@@ -22,39 +23,18 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static org.folio.rest.support.HttpResponseMatchers.statusCodeIs;
-import static org.folio.rest.support.JsonObjectMatchers.hasSoleMessgeContaining;
+import static org.folio.rest.support.JsonObjectMatchers.hasSoleMessageContaining;
 import static org.folio.rest.support.http.InterfaceUrls.*;
 import static org.folio.rest.support.http.InterfaceUrls.instancesStorageUrl;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertThat;
-import org.junit.BeforeClass;
 
 public class MaterialTypeTest extends TestBaseWithInventoryUtil {
 
   private static final String SUPPORTED_CONTENT_TYPE_JSON_DEF = "application/json";
-  private static UUID mainLibraryLocationId;
 
-  private String canCirculateLoanTypeID;
-  
-  @BeforeClass
-  public static void beforeAny()
-    throws MalformedURLException,
-    InterruptedException,
-    ExecutionException,
-    TimeoutException {
-    StorageTestSuite.deleteAll(itemsStorageUrl(""));
-    StorageTestSuite.deleteAll(holdingsStorageUrl(""));
-    StorageTestSuite.deleteAll(instancesStorageUrl(""));
-
-    StorageTestSuite.deleteAll(locationsStorageUrl(""));
-    StorageTestSuite.deleteAll(locLibraryStorageUrl(""));
-    StorageTestSuite.deleteAll(locCampusStorageUrl(""));
-    StorageTestSuite.deleteAll(locInstitutionStorageUrl(""));
-
-    LocationsTest.createLocUnits(true);
-    mainLibraryLocationId = LocationsTest.createLocation(null, "Main Library (Loan)", "Lo/M");
-  }
+  // see also @BeforeClass TestBaseWithInventoryUtil.beforeAny()
 
   @Before
   public void beforeEach()
@@ -141,7 +121,7 @@ public class MaterialTypeTest extends TestBaseWithInventoryUtil {
     JsonErrorResponse response = createMaterialType.get(5, TimeUnit.SECONDS);
 
     assertThat(response.getStatusCode(), is(AdditionalHttpStatusCodes.UNPROCESSABLE_ENTITY));
-    assertThat(response.getErrors(), hasSoleMessgeContaining("Unrecognized field"));
+    assertThat(response.getErrors(), hasSoleMessageContaining("Unrecognized field"));
   }
 
   @Test
@@ -378,6 +358,7 @@ public class MaterialTypeTest extends TestBaseWithInventoryUtil {
     JsonObject item = new JsonObject();
 
     item.put("barcode", "12345");
+    item.put("status", new JsonObject().put("name", "Available"));
     item.put("holdingsRecordId", holdingsRecordId);
     item.put("materialTypeId", materialTypeId);
     item.put("permanentLoanTypeId", canCirculateLoanTypeID);

@@ -1,8 +1,4 @@
 {
-  "fullText": {
-    "defaultDictionary": "simple"
-  },
-
   "tables": [
     {
       "tableName": "loan_type",
@@ -22,12 +18,6 @@
       "uniqueIndex": [
         {
           "fieldName": "name",
-          "tOps": "ADD"
-        }
-      ],
-      "index": [
-        {
-          "fieldName": "id",
           "tOps": "ADD"
         }
       ]
@@ -153,12 +143,6 @@
           "fieldName": "name",
           "tOps": "ADD"
         }
-      ],
-      "index": [
-        {
-          "fieldName": "id",
-          "tOps": "ADD"
-        }
       ]
     },
     {
@@ -168,12 +152,6 @@
       "uniqueIndex": [
         {
           "fieldName": "name",
-          "tOps": "ADD"
-        }
-      ],
-      "index": [
-        {
-          "fieldName": "id",
           "tOps": "ADD"
         }
       ]
@@ -191,12 +169,6 @@
           "fieldName": "code",
           "tOps": "ADD"
         }
-      ],
-      "index": [
-        {
-          "fieldName": "id",
-          "tOps": "ADD"
-        }
       ]
     },
     {
@@ -206,12 +178,6 @@
       "uniqueIndex": [
         {
           "fieldName": "name",
-          "tOps": "ADD"
-        }
-      ],
-      "index": [
-        {
-          "fieldName": "id",
           "tOps": "ADD"
         }
       ]
@@ -229,12 +195,6 @@
           "fieldName": "code",
           "tOps": "ADD"
         }
-      ],
-      "index": [
-        {
-          "fieldName": "id",
-          "tOps": "ADD"
-        }
       ]
     },
     {
@@ -250,12 +210,6 @@
           "fieldName": "code",
           "tOps": "ADD"
         }
-      ],
-      "index": [
-        {
-          "fieldName": "id",
-          "tOps": "ADD"
-        }
       ]
     },
     {
@@ -267,12 +221,6 @@
           "fieldName": "name",
           "tOps": "ADD"
         }
-      ],
-      "index": [
-        {
-          "fieldName": "id",
-          "tOps": "ADD"
-        }
       ]
     },
     {
@@ -282,12 +230,6 @@
       "uniqueIndex": [
         {
           "fieldName": "name",
-          "tOps": "ADD"
-        }
-      ],
-      "index": [
-        {
-          "fieldName": "id",
           "tOps": "ADD"
         }
       ]
@@ -371,7 +313,12 @@
     },
     {
       "tableName": "instance",
+      "fromModuleVersion": "19.2.0",
       "withMetadata": true,
+      "withAuditing": true,
+      "auditingTableName": "audit_instance",
+      "auditingFieldName": "record",
+      "customSnippetPath": "audit-delete-trigger.sql",
       "foreignKeys": [
         {
           "fieldName": "instanceStatusId",
@@ -421,24 +368,6 @@
           "removeAccents": true
         },
         {
-          "fieldName": "instanceTypeId",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
-          "fieldName": "instanceStatusId",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": false
-        },
-        {
-          "fieldName": "modeOfIssuanceId",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": false
-        },
-        {
           "fieldName": "classifications",
           "tOps": "ADD",
           "caseSensitive": false,
@@ -452,12 +381,6 @@
         }
       ],
       "index": [
-        {
-          "fieldName": "id",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
         {
           "fieldName": "source",
           "tOps": "ADD",
@@ -493,17 +416,36 @@
           "tOps": "ADD",
           "caseSensitive": false,
           "removeAccents": true
+        },
+        {
+          "fieldName": "staffSuppress",
+          "tOps": "ADD",
+          "caseSensitive": false,
+          "removeAccents": false
+        },
+        {
+          "fieldName": "discoverySuppress",
+          "tOps": "ADD",
+          "caseSensitive": false,
+          "removeAccents": false
+        },
+        {
+          "fieldName": "metadata.updatedDate",
+          "tOps": "ADD",
+          "caseSensitive": false,
+          "removeAccents": false
         }
       ],
       "fullTextIndex": [
+        {
+          "fieldName": "keyword",
+          "multiFieldNames": "title,contributors[*].name,identifiers[*].value"
+        },
         {
           "fieldName": "title"
         },
         {
           "fieldName": "languages"
-        },
-        {
-          "fieldName": "instanceTypeId"
         },
         {
           "fieldName": "contributors",
@@ -514,33 +456,22 @@
           "fieldName": "identifiers",
           "arraySubfield" : "value",
           "arrayModifiers": ["identifierTypeId"]
+        },
+        {
+          "fieldName": "invalidIsbn",
+          "sqlExpression" : "normalize_invalid_isbns(jsonb->'identifiers')",
+          "sqlExpressionQuery": "normalize_digits($)"
+        },
+        {
+          "fieldName": "isbn",
+          "sqlExpression" : "normalize_isbns(jsonb->'identifiers')",
+          "sqlExpressionQuery": "normalize_digits($)"
         }
-      ],
-      "customSnippetPath": "instanceHrid.sql"
+      ]
     },
     {
       "tableName": "instance_relationship",
       "withMetadata": true,
-      "index": [
-        {
-          "fieldName": "id",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
-          "fieldName": "superInstanceId",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
-          "fieldName": "subInstanceId",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        }
-      ],
       "foreignKeys": [
         {
           "fieldName": "superInstanceId",
@@ -643,7 +574,12 @@
     },
     {
       "tableName": "holdings_record",
+      "fromModuleVersion": "19.2.0",
       "withMetadata": true,
+      "withAuditing": true,
+      "auditingTableName": "audit_holdings_record",
+      "auditingFieldName": "record",
+      "customSnippetPath": "audit-delete-trigger.sql",
       "foreignKeys": [
         {
           "fieldName": "instanceId",
@@ -683,62 +619,61 @@
           "tOps": "ADD"
         }
       ],
-      "ginIndex": [
-        {
-          "fieldName": "instanceId",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
-          "fieldName": "permanentLocationId",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
-          "fieldName": "temporaryLocationId",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        }
-      ],
       "index": [
         {
-          "fieldName": "id",
+          "fieldName": "callNumber",
           "tOps": "ADD",
           "caseSensitive": false,
-          "removeAccents": true
+          "removeAccents": false
         },
         {
-          "fieldName": "instanceId",
+          "fieldName": "callNumberAndSuffix",
+          "multiFieldNames": "callNumber, callNumberSuffix",
           "tOps": "ADD",
           "caseSensitive": false,
-          "removeAccents": true
+          "removeAccents": false
         },
         {
-          "fieldName": "permanentLocationId",
+          "fieldName": "fullCallNumber",
+          "multiFieldNames": "callNumberPrefix, callNumber, callNumberSuffix",
           "tOps": "ADD",
           "caseSensitive": false,
-          "removeAccents": true
+          "removeAccents": false
         },
         {
-          "fieldName": "temporaryLocationId",
+          "fieldName": "discoverySuppress",
           "tOps": "ADD",
           "caseSensitive": false,
-          "removeAccents": true
+          "removeAccents": false
         }
       ],
-      "customSnippetPath": "holdingsRecordHrid.sql"
+      "fullTextIndex": [
+        {
+          "fieldName": "callNumberAndSuffixNormalized",
+          "sqlExpression" : "normalize_holdings_call_number_and_suffix(jsonb)",
+          "sqlExpressionQuery": "normalize_call_number_string($) || '*'"
+        },
+        {
+          "fieldName": "fullCallNumberNormalized",
+          "sqlExpression" : "normalize_holdings_full_call_number(jsonb)",
+          "sqlExpressionQuery": "normalize_call_number_string($) || '*'"
+        }
+      ]
     },
     {
       "tableName": "item",
       "withMetadata": true,
+      "fromModuleVersion": "19.2.0",
+      "withAuditing": true,
+      "auditingTableName": "audit_item",
+      "auditingFieldName": "record",
+      "customSnippetPath": "audit-delete-trigger.sql",
       "foreignKeys": [
         {
           "fieldName": "holdingsRecordId",
           "targetTable": "holdings_record",
           "targetTableAlias" : "holdingsRecords",
+          "tableAlias": "item",
           "tOps": "ADD"
         },
         {
@@ -771,6 +706,11 @@
           "fieldName": "temporaryLocationId",
           "targetTable": "location",
           "tOps": "ADD"
+        },
+        {
+          "fieldName": "effectiveLocationId",
+          "targetTable": "location",
+          "tOps": "ADD"
         }
 
       ],
@@ -782,16 +722,10 @@
       ],
       "index": [
         {
-          "fieldName": "holdingsRecordId",
+          "fieldName": "accessionNumber",
           "tOps": "ADD",
           "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
-          "fieldName": "materialTypeId",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
+          "removeAccents": false
         },
         {
           "fieldName": "barcode",
@@ -806,10 +740,24 @@
           "removeAccents": true
         },
         {
-          "fieldName": "id",
+          "fieldName": "callNumberAndSuffix",
+          "multiFieldNames": "effectiveCallNumberComponents.callNumber, effectiveCallNumberComponents.suffix",
           "tOps": "ADD",
           "caseSensitive": false,
-          "removeAccents": true
+          "removeAccents": false
+        },
+        {
+          "fieldName": "fullCallNumber",
+          "multiFieldNames": "effectiveCallNumberComponents.prefix, effectiveCallNumberComponents.callNumber, effectiveCallNumberComponents.suffix",
+          "tOps": "ADD",
+          "caseSensitive": false,
+          "removeAccents": false
+        },
+        {
+          "fieldName": "discoverySuppress",
+          "tOps": "ADD",
+          "caseSensitive": false,
+          "removeAccents": false
         }
       ],
       "ginIndex": [
@@ -824,27 +772,139 @@
           "tOps": "ADD",
           "caseSensitive": false,
           "removeAccents": true
-        },
-        {
-          "fieldName": "materialTypeId",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
-          "fieldName": "holdingsRecordId",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
         }
       ],
       "fullTextIndex": [
         {
           "fieldName": "barcode",
           "tOps": "ADD"
+        },
+        {
+          "fieldName": "callNumberAndSuffixNormalized",
+          "sqlExpression" : "normalize_item_call_number_and_suffix(jsonb)",
+          "sqlExpressionQuery": "normalize_call_number_string($) || '*'"
+        },
+        {
+          "fieldName": "fullCallNumberNormalized",
+          "sqlExpression" : "normalize_item_full_call_number(jsonb)",
+          "sqlExpressionQuery": "normalize_call_number_string($) || '*'"
+        }
+      ]
+    },
+    {
+      "tableName": "hrid_settings",
+      "fromModuleVersion": "17.1.0",
+      "withMetadata": false,
+      "withAuditing": false,
+      "customSnippetPath": "hridSettings.sql"
+    },
+    {
+      "tableName": "preceding_succeeding_title",
+      "fromModuleVersion": "19.0.0",
+      "withMetadata": true,
+      "foreignKeys": [
+        {
+          "fieldName": "precedingInstanceId",
+          "targetTable": "instance"
+        },
+        {
+          "fieldName": "succeedingInstanceId",
+          "targetTable": "instance"
         }
       ],
-      "customSnippetPath": "itemHrid.sql"
+      "customSnippetPath": "alterPrecedingSucceedingTitle.sql"
+    }
+  ],
+  "scripts": [
+    {
+      "run": "before",
+      "snippetPath": "populateRmbInternalIndex.sql",
+      "fromModuleVersion": "19.1.1"
+    },
+    {
+      "run": "before",
+      "snippetPath": "createIsbnFunctions.sql",
+      "fromModuleVersion": "19.2.0"
+    },
+    {
+      "run": "before",
+      "snippetPath": "createCallNumberNormalizationFunctions.sql",
+      "fromModuleVersion": "19.2.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "itemEffectiveLocation.sql",
+      "fromModuleVersion": "17.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "populateEffectiveLocationForExistingItems.sql",
+      "fromModuleVersion": "17.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "populateEffectiveLocationForeignKey.sql",
+      "fromModuleVersion": "18.2.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "populateEffectiveCallNumberComponentsForExistingItems.sql",
+      "fromModuleVersion": "18.3.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "removeOldHridOperations.sql",
+      "fromModuleVersion": "17.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "instanceStatusUpdatedDateTrigger.sql",
+      "fromModuleVersion": "17.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "updateItemStatusDate.sql",
+      "fromModuleVersion": "19.2.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "alterHridSequences.sql",
+      "fromModuleVersion": "18.2.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "migrateItemCopyNumberToSingleValue.sql",
+      "fromModuleVersion": "19.0.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "renameModesOfIssuance.sql",
+      "fromModuleVersion": "19.0.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "migratePrecedingSucceedingTitles.sql",
+      "fromModuleVersion": "19.0.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "populateDiscoverySuppressIfNotSet.sql",
+      "fromModuleVersion": "19.0.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "oaipmh/revert_createOaiPmhViewFunction.sql",
+      "fromModuleVersion": "19.2.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "oaipmh/createOaiPmhViewFunction.sql",
+      "fromModuleVersion": "19.2.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "removeOldPrecedingSucceedingTitles.sql",
+      "fromModuleVersion": "19.2.0"
     }
   ]
 }

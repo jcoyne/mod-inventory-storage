@@ -6,24 +6,34 @@ import io.vertx.core.CompositeFuture;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+
 import org.folio.rest.jaxrs.model.Instance;
 import org.folio.rest.jaxrs.model.Instances;
 import org.folio.rest.jaxrs.model.InstancesBatchResponse;
+import org.folio.rest.jaxrs.model.Metadata;
 import org.folio.rest.jaxrs.resource.InstanceStorageBatchInstances;
 import org.folio.rest.persist.PgUtil;
 import org.folio.rest.persist.PostgresClient;
+import org.folio.rest.support.HridManager;
+import org.folio.rest.tools.utils.JwtUtils;
 
 import javax.ws.rs.core.Response;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
+import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.folio.rest.RestVerticle.MODULE_SPECIFIC_ARGS;
+import static org.folio.rest.RestVerticle.OKAPI_HEADER_TOKEN;
+import static org.folio.rest.RestVerticle.OKAPI_USERID_HEADER;
 
 public class InstanceStorageBatchAPI implements InstanceStorageBatchInstances {
 
@@ -41,7 +51,7 @@ public class InstanceStorageBatchAPI implements InstanceStorageBatchInstances {
     vertxContext.runOnContext(v -> {
       try {
         PostgresClient postgresClient = PgUtil.postgresClient(vertxContext, okapiHeaders);
-
+        populateMetaDataForList(entity.getInstances(), okapiHeaders);
         executeInBatch(entity.getInstances(),
           (instances, saveFutures) -> saveInstances(instances, postgresClient, saveFutures))
           .setHandler(ar -> {
@@ -98,7 +108,6 @@ public class InstanceStorageBatchAPI implements InstanceStorageBatchInstances {
   private Future<List<Future>> saveInstances(List<Instance> instances, PostgresClient postgresClient,
                                              List<Future> saveFutures) {
     Future<List<Future>> future = Future.future();
-
     List<Future> futures = instances.stream()
       .map(instance -> saveInstance(instance, postgresClient))
       .collect(Collectors.toList());
@@ -121,14 +130,32 @@ public class InstanceStorageBatchAPI implements InstanceStorageBatchInstances {
   private Future<Instance> saveInstance(Instance instance, PostgresClient postgresClient) {
     Future<Instance> future = Future.future();
 
-    postgresClient.save(INSTANCE_TABLE, instance.getId(), instance, save -> {
-      if (save.failed()) {
-        log.error("Failed to create Instances", save.cause());
-        future.fail(save.cause());
-        return;
-      }
-      instance.setId(save.result());
-      future.complete(instance);
+    final Future<String> hridFuture;
+    if (isBlank(instance.getHrid())) {
+      final HridManager hridManager = new HridManager(Vertx.currentContext(), postgresClient);
+      hridFuture = hridManager.getNextInstanceHrid();
+    } else {
+      hridFuture = StorageHelper.completeFuture(instance.getHrid());
+    }
+
+    hridFuture.map(hrid -> {
+      instance.setHrid(hrid);
+
+      postgresClient.save(INSTANCE_TABLE, instance.getId(), instance, save -> {
+        if (save.failed()) {
+          log.error("Failed to create Instances", save.cause());
+          future.fail(save.cause());
+          return;
+        }
+        instance.setId(save.result());
+        future.complete(instance);
+      });
+      return null;
+    })
+    .otherwise(error -> {
+      log.error("Failed to generate an instance HRID", error);
+      future.fail(error);
+      return null;
     });
 
     return future;
@@ -154,5 +181,32 @@ public class InstanceStorageBatchAPI implements InstanceStorageBatchInstances {
     response.setTotalRecords(response.getInstances().size());
     return response;
   }
+
+  private void populateMetaDataForList(List<Instance> list, Map<String, String> okapiHeaders) {
+    String userId = okapiHeaders.getOrDefault(OKAPI_USERID_HEADER, "");
+    String token = okapiHeaders.getOrDefault(OKAPI_HEADER_TOKEN, "");
+    if (userId == null && token != null) {
+      userId = userIdFromToken(token);
+    }
+    Metadata md = new Metadata();
+    md.setUpdatedDate(new Date());
+    md.setCreatedDate(md.getUpdatedDate());
+    md.setCreatedByUserId(userId);
+    md.setUpdatedByUserId(userId);
+    list.forEach(instance -> instance.setMetadata(md));
+  }
+
+  private static String userIdFromToken(String token) {
+    try {
+      String[] split = token.split("\\.");
+      String json = JwtUtils.getJson(split[1]);
+      JsonObject j = new JsonObject(json);
+      return j.getString("user_id");
+    } catch (Exception e) {
+      log.warn("Invalid x-okapi-token: " + token, e);
+      return null;
+    }
+  }
+
 
 }

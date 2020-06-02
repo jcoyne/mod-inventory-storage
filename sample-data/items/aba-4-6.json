@@ -1,5 +1,6 @@
 {
   "id" : "9ea1fd0b-0259-4edb-95a3-eb2f9a063e20",
+  "hrid" : "item000000000006",
   "status" : {
     "name" : "Available"
   },
@@ -9,7 +10,7 @@
   "barcode" : "A14837334306",
   "enumeration" : "v.70:no.1-6",
   "chronology" : "1984:Jan.-June",
-  "copyNumbers" : [ "1" ],
+  "copyNumber" : "1",
   "notes" : [ ],
   "circulationNotes" : [ ],
   "yearCaption" : [ ],

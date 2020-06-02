@@ -1,8 +1,11 @@
 package org.folio.rest.impl;
 
+import static org.apache.commons.lang3.StringUtils.isBlank;
+
 import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import javax.validation.constraints.Max;
 import javax.validation.constraints.Min;
@@ -24,6 +27,7 @@ import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.persist.Criteria.Limit;
 import org.folio.rest.persist.Criteria.Offset;
 import org.folio.rest.persist.cql.CQLWrapper;
+import org.folio.rest.support.HridManager;
 import org.folio.rest.tools.messages.MessageConsts;
 import org.folio.rest.tools.messages.Messages;
 import org.folio.rest.tools.utils.TenantTool;
@@ -34,6 +38,7 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import io.vertx.ext.web.RoutingContext;
 
 public class InstanceStorageAPI implements InstanceStorage {
 
@@ -57,7 +62,7 @@ public class InstanceStorageAPI implements InstanceStorage {
     int limit,
     int offset,
     String tableName) throws FieldException {
-    
+
     CQL2PgJSON cql2pgJson = new CQL2PgJSON(tableName + ".jsonb");
 
     return new CQLWrapper(cql2pgJson, query)
@@ -71,28 +76,33 @@ public class InstanceStorageAPI implements InstanceStorage {
     @DefaultValue("10") @Min(1L) @Max(100L) int limit,
     String query,
     @DefaultValue("en") @Pattern(regexp = "[a-zA-Z]{2}") String lang,
-    Map<String, String> okapiHeaders,
+    RoutingContext routingContext, Map<String, String> okapiHeaders,
     Handler<AsyncResult<Response>> asyncResultHandler,
     Context vertxContext) {
 
-    try {
-      PreparedCQL preparedCql = handleCQL(query, limit, offset);
-      PgUtil.getWithOptimizedSql(preparedCql.getTableName(), Instance.class, Instances.class,
-        "title", query, offset, limit,
-        okapiHeaders, vertxContext, GetInstanceStorageInstancesResponse.class, asyncResultHandler);
-    } catch (Exception e) {
-      log.error(e.getMessage(), e);
-      asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
-        GetInstanceStorageInstancesResponse.
-          respond500WithTextPlain(e.getMessage())));
+    if (PgUtil.checkOptimizedCQL(query, "title") != null) { // Until RMB-573 is fixed
+      try {
+        PreparedCQL preparedCql = handleCQL(query, limit, offset);
+        PgUtil.getWithOptimizedSql(preparedCql.getTableName(), Instance.class, Instances.class,
+          "title", query, offset, limit,
+          okapiHeaders, vertxContext, GetInstanceStorageInstancesResponse.class, asyncResultHandler);
+      } catch (Exception e) {
+        log.error(e.getMessage(), e);
+        asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
+          GetInstanceStorageInstancesResponse.
+            respond500WithTextPlain(e.getMessage())));
+      }
+      return;
     }
+    PgUtil.streamGet(INSTANCE_TABLE, Instance.class, query, offset, limit, null,
+      "instances", routingContext, okapiHeaders, vertxContext);
   }
 
   @Override
   public void postInstanceStorageInstances(
     @DefaultValue("en") @Pattern(regexp = "[a-zA-Z]{2}") String lang,
     Instance entity,
-    Map<String, String> okapiHeaders,
+    RoutingContext routingContext, Map<String, String> okapiHeaders,
     Handler<AsyncResult<Response>> asyncResultHandler,
     Context vertxContext) {
 
@@ -118,29 +128,56 @@ public class InstanceStorageAPI implements InstanceStorage {
             }
           }
 
-          postgresClient.save(INSTANCE_TABLE, entity.getId(), entity,
-            reply -> {
-              try {
-                if(reply.succeeded()) {
+          final Future<String> hridFuture;
+          if (isBlank(entity.getHrid())) {
+            final HridManager hridManager = new HridManager(vertxContext, postgresClient);
+            hridFuture = hridManager.getNextInstanceHrid();
+          } else {
+            hridFuture = StorageHelper.completeFuture(entity.getHrid());
+          }
+
+          hridFuture.map(hrid -> {
+            entity.setHrid(hrid);
+            postgresClient.save(INSTANCE_TABLE, entity.getId(), entity,
+              reply -> {
+                try {
+                  if(reply.succeeded()) {
+                    asyncResultHandler.handle(
+                      io.vertx.core.Future.succeededFuture(
+                        PostInstanceStorageInstancesResponse
+                          .respond201WithApplicationJson(entity,
+                              PostInstanceStorageInstancesResponse.headersFor201().withLocation(reply.result()))));
+                  }
+                  else {
+                    if (PgExceptionUtil.isUniqueViolation(reply.cause())) {
+                      asyncResultHandler.handle(
+                          io.vertx.core.Future.succeededFuture(
+                            PostInstanceStorageInstancesResponse
+                              .respond400WithTextPlain(PgExceptionUtil.badRequestMessage(reply.cause()))));
+                    } else {
+                      asyncResultHandler.handle(
+                        io.vertx.core.Future.succeededFuture(
+                          PostInstanceStorageInstancesResponse
+                            .respond400WithTextPlain(reply.cause().getMessage())));
+                    }
+                  }
+                } catch (Exception e) {
+                  log.error(e.getMessage(), e);
                   asyncResultHandler.handle(
                     io.vertx.core.Future.succeededFuture(
                       PostInstanceStorageInstancesResponse
-                        .respond201WithApplicationJson(entity,PostInstanceStorageInstancesResponse.headersFor201().withLocation(reply.result()))));
+                        .respond500WithTextPlain(e.getMessage())));
                 }
-                else {
-                  asyncResultHandler.handle(
-                    io.vertx.core.Future.succeededFuture(
-                      PostInstanceStorageInstancesResponse
-                        .respond400WithTextPlain(reply.cause().getMessage())));
-                }
-              } catch (Exception e) {
-                log.error(e.getMessage(), e);
-                asyncResultHandler.handle(
-                  io.vertx.core.Future.succeededFuture(
-                    PostInstanceStorageInstancesResponse
-                      .respond500WithTextPlain(e.getMessage())));
-              }
-            });
+              });
+            return null;
+          }).otherwise(error -> {
+            log.error(error.getMessage(), error);
+            asyncResultHandler.handle(
+              io.vertx.core.Future.succeededFuture(
+                PostInstanceStorageInstancesResponse
+                  .respond500WithTextPlain(error.getMessage())));
+            return null;
+          });
         } catch (Exception e) {
           log.error(e.getMessage(), e);
           asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(
@@ -159,7 +196,7 @@ public class InstanceStorageAPI implements InstanceStorage {
   @Override
   public void deleteInstanceStorageInstances(
     @DefaultValue("en") @Pattern(regexp = "[a-zA-Z]{2}") String lang,
-    Map<String, String> okapiHeaders,
+    RoutingContext routingContext, Map<String, String> okapiHeaders,
     Handler<AsyncResult<Response>> asyncResultHandler,
     Context vertxContext) {
 
@@ -327,8 +364,38 @@ public class InstanceStorageAPI implements InstanceStorage {
     Handler<AsyncResult<Response>> asyncResultHandler,
     Context vertxContext) {
 
-    PgUtil.put(INSTANCE_TABLE, entity, instanceId, okapiHeaders, vertxContext,
-        PutInstanceStorageInstancesByInstanceIdResponse.class, asyncResultHandler);
+    PgUtil.getById(INSTANCE_TABLE, Instance.class, instanceId, okapiHeaders, vertxContext,
+        GetInstanceStorageInstancesByInstanceIdResponse.class, response -> {
+          if (response.succeeded()) {
+            if (response.result().getStatus() == 404) {
+              asyncResultHandler.handle(Future.succeededFuture(
+                  PutInstanceStorageInstancesByInstanceIdResponse
+                  .respond404WithTextPlain(response.result().getEntity())));
+            } else if (response.result().getStatus() == 500) {
+              asyncResultHandler.handle(Future.succeededFuture(
+                  PutInstanceStorageInstancesByInstanceIdResponse
+                  .respond500WithTextPlain(response.result().getEntity())));
+            } else {
+              final Instance existingInstance = (Instance) response.result().getEntity();
+              if (Objects.equals(entity.getHrid(), existingInstance.getHrid())) {
+                PgUtil.put(INSTANCE_TABLE, entity, instanceId, okapiHeaders, vertxContext,
+                    PutInstanceStorageInstancesByInstanceIdResponse.class, asyncResultHandler);
+              } else {
+                asyncResultHandler.handle(Future.succeededFuture(
+                    PutInstanceStorageInstancesByInstanceIdResponse
+                    .respond400WithTextPlain(
+                        "The hrid field cannot be changed: new="
+                            + entity.getHrid()
+                            + ", old="
+                            + existingInstance.getHrid())));
+              }
+            }
+          } else {
+            asyncResultHandler.handle(Future.succeededFuture(
+                PutInstanceStorageInstancesByInstanceIdResponse
+                .respond500WithTextPlain(response.cause().getMessage())));
+          }
+        });
   }
 
   private boolean isUUID(String id) {
@@ -359,35 +426,9 @@ public class InstanceStorageAPI implements InstanceStorage {
       String instanceId, String lang, Map<String, String> okapiHeaders,
       Handler<AsyncResult<Response>> asyncResultHandler, Context vertxContext) {
 
-    PostgresClient postgresClient =
-        PostgresClient.getInstance(vertxContext.owner(), TenantTool.tenantId(okapiHeaders));
-
-    String where = "WHERE id='" + instanceId + "'";
-    postgresClient.get(INSTANCE_SOURCE_MARC_TABLE, MarcJson.class, where, false, false, reply -> {
-      if (! reply.succeeded()) {
-        asyncResultHandler.handle(Future.succeededFuture(
-          GetInstanceStorageInstancesSourceRecordMarcJsonByInstanceIdResponse
-            .respond500WithTextPlain(reply.cause().getMessage())));
-        return;
-      }
-      List<MarcJson> results = reply.result().getResults();
-      if (results.isEmpty()) {
-        asyncResultHandler.handle(Future.succeededFuture(
-          GetInstanceStorageInstancesSourceRecordMarcJsonByInstanceIdResponse
-            .respond404WithTextPlain("No source record for instance " + instanceId)));
-        return;
-      }
-      MarcJson marcJson = results.get(0);
-      if (marcJson == null) {
-        asyncResultHandler.handle(Future.succeededFuture(
-          GetInstanceStorageInstancesSourceRecordMarcJsonByInstanceIdResponse
-            .respond404WithTextPlain("No MARC source record for instance " + instanceId)));
-        return;
-      }
-      asyncResultHandler.handle(Future.succeededFuture(
-          GetInstanceStorageInstancesSourceRecordMarcJsonByInstanceIdResponse.respond200WithApplicationJson(
-              marcJson)));
-    });
+    PgUtil.getById(INSTANCE_SOURCE_MARC_TABLE, MarcJson.class, instanceId,
+      okapiHeaders, vertxContext,
+      GetInstanceStorageInstancesSourceRecordMarcJsonByInstanceIdResponse.class, asyncResultHandler);
   }
 
   @Override
@@ -419,9 +460,8 @@ public class InstanceStorageAPI implements InstanceStorage {
           PutInstanceStorageInstancesSourceRecordMarcJsonByInstanceIdResponse.respond204()));
         return;
       }
-      Map<Object, String> fields = PgExceptionUtil.getBadRequestFields(reply.cause());
-      if (fields != null && "23503".equals(fields.get('C'))  // foreign key constraint violation
-          && INSTANCE_SOURCE_MARC_TABLE.equals(fields.get('t'))) {
+      if (PgExceptionUtil.isForeignKeyViolation(reply.cause())
+        && reply.cause().getMessage().contains(INSTANCE_SOURCE_MARC_TABLE)) {
         asyncResultHandler.handle(Future.succeededFuture(
             PutInstanceStorageInstancesSourceRecordMarcJsonByInstanceIdResponse
             .respond404WithTextPlain(reply.cause().getMessage())));
@@ -555,7 +595,7 @@ public class InstanceStorageAPI implements InstanceStorage {
         reply -> {
           try {
             if (reply.succeeded()) {
-              if (reply.result().getUpdated() == 0) {
+              if (reply.result().rowCount() == 0) {
                 asyncResultHandler.handle(io.vertx.core.Future.succeededFuture(PutInstanceStorageInstanceRelationshipsByRelationshipIdResponse
                     .respond404WithTextPlain(messages.getMessage(lang, MessageConsts.NoRecordsUpdated))));
               } else{

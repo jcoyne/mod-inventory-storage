@@ -1,10 +1,26 @@
 package org.folio.rest.api;
 
-import java.net.MalformedURLException;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.folio.rest.api.StorageTestSuite.TENANT_ID;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
+
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
+import io.vertx.core.json.JsonArray;
+import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.RowIterator;
+import io.vertx.sqlclient.RowSet;
 import org.folio.rest.support.HttpClient;
+import org.folio.rest.support.Response;
+import org.folio.rest.support.ResponseHandler;
 import org.folio.rest.support.http.ResourceClient;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -19,8 +35,20 @@ import io.vertx.core.Vertx;
 public abstract class TestBase {
   private static boolean invokeStorageTestSuiteAfter = false;
   static HttpClient client;
-  static ResourceClient instancesClient;
-  static ResourceClient holdingsClient;
+  protected static ResourceClient instancesClient;
+  protected static ResourceClient holdingsClient;
+  protected static ResourceClient itemsClient;
+  static ResourceClient locationsClient;
+  static ResourceClient callNumberTypesClient;
+  static ResourceClient modesOfIssuanceClient;
+  static ResourceClient precedingSucceedingTitleClient;
+  static ResourceClient instanceRelationshipsClient;
+  static ResourceClient instanceRelationshipTypesClient;
+  static ResourceClient instancesStorageSyncClient;
+  static ResourceClient itemsStorageSyncClient;
+  static ResourceClient instancesStorageBatchInstancesClient;
+  static ResourceClient instanceTypesClient;
+
 
   @BeforeClass
   public static void testBaseBeforeClass() throws Exception {
@@ -34,17 +62,46 @@ public abstract class TestBase {
     client = new HttpClient(vertx);
     instancesClient = ResourceClient.forInstances(client);
     holdingsClient = ResourceClient.forHoldings(client);
+    itemsClient = ResourceClient.forItems(client);
+    locationsClient = ResourceClient.forLocations(client);
+    callNumberTypesClient = ResourceClient.forCallNumberTypes(client);
+    modesOfIssuanceClient = ResourceClient.forModesOfIssuance(client);
+    instanceRelationshipsClient = ResourceClient.forInstanceRelationships(client);
+    instanceRelationshipTypesClient = ResourceClient.forInstanceRelationshipTypes(client);
+    precedingSucceedingTitleClient = ResourceClient.forPrecedingSucceedingTitles(client);
+    instancesStorageSyncClient = ResourceClient.forInstancesStorageSync(client);
+    itemsStorageSyncClient = ResourceClient.forItemsStorageSync(client);
+    instancesStorageBatchInstancesClient = ResourceClient
+      .forInstancesStorageBatchInstances(client);
+    instanceTypesClient = ResourceClient
+      .forInstanceTypes(client);
   }
 
   @AfterClass
   public static void testBaseAfterClass()
     throws InterruptedException,
     ExecutionException,
-    TimeoutException,
-    MalformedURLException {
+    TimeoutException {
 
     if (invokeStorageTestSuiteAfter) {
       StorageTestSuite.after();
+    }
+  }
+
+  /**
+   * Assert that a GET at the url returns 404 status code (= not found).
+   * @param url  endpoint where to execute a GET request
+   */
+  void assertGetNotFound(URL url) {
+    CompletableFuture<Response> getCompleted = new CompletableFuture<>();
+
+    client.get(url, TENANT_ID, ResponseHandler.text(getCompleted));
+    Response response;
+    try {
+      response = getCompleted.get(5, SECONDS);
+      assertThat(response.getStatusCode(), is(HttpURLConnection.HTTP_NOT_FOUND));
+    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+      throw new RuntimeException(e);
     }
   }
 

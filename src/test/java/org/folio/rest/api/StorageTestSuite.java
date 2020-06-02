@@ -1,7 +1,14 @@
 package org.folio.rest.api;
 
+import io.vertx.core.DeploymentOptions;
+import io.vertx.core.Promise;
+import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
+import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.RowSet;
 import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -25,21 +32,14 @@ import org.junit.BeforeClass;
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 
-import io.vertx.core.DeploymentOptions;
-import io.vertx.core.Future;
-import io.vertx.core.Vertx;
-import io.vertx.core.json.JsonArray;
-import io.vertx.core.json.JsonObject;
-import io.vertx.ext.sql.ResultSet;
-import io.vertx.ext.sql.UpdateResult;
-
 @RunWith(Suite.class)
 
 @Suite.SuiteClasses({
-  // these run with loadReference=true, loadSample=false
   InstanceStorageTest.class,
+  InstanceBulkTest.class,
   HoldingsStorageTest.class,
   ItemStorageTest.class,
+  HoldingsTypeTest.class,
   LoanTypeTest.class,
   MaterialTypeTest.class,
   ContributorTypesTest.class,
@@ -53,9 +53,18 @@ import io.vertx.ext.sql.UpdateResult;
   ReferenceTablesTest.class,
   ItemDamagedStatusAPITest.class,
   ItemDamagedStatusAPIUnitTest.class,
-
-  // these run with loadReference=true, loadSample=true
+  ItemEffectiveLocationTest.class,
   SampleDataTest.class,
+  HridSettingsStorageTest.class,
+  HridSettingsStorageParameterizedTest.class,
+  ItemCopyNumberMigrationScriptTest.class,
+  ItemEffectiveCallNumberComponentsTest.class,
+  ItemEffectiveCallNumberDataUpgradeTest.class,
+  ModesOfIssuanceMigrationScriptTest.class,
+  PrecedingSucceedingTitleTest.class,
+  HoldingsCallNumberNormalizedTest.class,
+  ItemCallNumberNormalizedTest.class,
+  OaiPmhViewTest.class
 })
 public class StorageTestSuite {
   public static final String TENANT_ID = "test_tenant";
@@ -132,8 +141,7 @@ public class StorageTestSuite {
   public static void after()
     throws InterruptedException,
     ExecutionException,
-    TimeoutException,
-    MalformedURLException {
+    TimeoutException {
 
     removeTenant(TENANT_ID);
 
@@ -174,10 +182,10 @@ public class StorageTestSuite {
 
   static void checkForMismatchedIDs(String table) {
     try {
-      ResultSet results = getRecordsWithUnmatchedIds(
+      RowSet<Row> results = getRecordsWithUnmatchedIds(
         TENANT_ID, table);
 
-      Integer mismatchedRowCount = results.getNumRows();
+      Integer mismatchedRowCount = results.rowCount();
 
       assertThat(mismatchedRowCount, is(0));
     } catch (Exception e) {
@@ -187,26 +195,35 @@ public class StorageTestSuite {
   }
 
   protected static Boolean deleteAll(String tenantId, String tableName) {
+    CompletableFuture<Boolean> cf = new CompletableFuture<>();
 
-    PostgresClient postgresClient = PostgresClient.getInstance(getVertx(), tenantId);
+    try {
+      PostgresClient postgresClient = PostgresClient.getInstance(getVertx(), tenantId);
 
-    Future<UpdateResult> future = Future.future();
-    String sql = String.format("DELETE FROM %s_%s.%s", tenantId, "mod_inventory_storage", tableName);
-    postgresClient.execute(sql, future.completer());
+      Promise<RowSet<Row>> promise = Promise.promise();
+      String sql = String.format("DELETE FROM %s_%s.%s", tenantId, "mod_inventory_storage", tableName);
+      postgresClient.execute(sql, promise);
 
-    return future.map(updateResult -> updateResult.getUpdated() > 0)
-      .otherwise(false)
-      .result();
+      promise.future()
+        .map(deleteResult -> cf.complete(deleteResult.rowCount() >= 0))
+        .otherwise(error -> cf.complete(false));
+
+      return cf.get(5, TimeUnit.SECONDS);
+    } catch (Exception e) {
+      Assert.fail("WARNING!!!!! Unable to delete all: " + e.getMessage());
+    }
+
+    return false;
   }
 
-  private static ResultSet getRecordsWithUnmatchedIds(String tenantId,
+  private static RowSet<Row> getRecordsWithUnmatchedIds(String tenantId,
                                                       String tableName)
     throws InterruptedException, ExecutionException, TimeoutException {
 
     PostgresClient dbClient = PostgresClient.getInstance(
       getVertx(), tenantId);
 
-    CompletableFuture<ResultSet> selectCompleted = new CompletableFuture<>();
+    CompletableFuture<RowSet<Row>> selectCompleted = new CompletableFuture<>();
 
     String sql = String.format("SELECT null FROM %s_%s.%s" +
         " WHERE CAST(id AS VARCHAR(50)) != jsonb->>'id'",
@@ -239,11 +256,10 @@ public class StorageTestSuite {
     deploymentComplete.get(20, TimeUnit.SECONDS);
   }
 
-  static void prepareTenant(String tenantId, boolean loadSample)
+  static void prepareTenant(String tenantId, String moduleFrom, String moduleTo, boolean loadSample)
     throws InterruptedException,
     ExecutionException,
-    TimeoutException,
-    MalformedURLException {
+    TimeoutException {
 
     CompletableFuture<Response> tenantPrepared = new CompletableFuture<>();
 
@@ -255,38 +271,34 @@ public class StorageTestSuite {
 
     JsonObject jo = new JsonObject();
     jo.put("parameters", ar);
-    jo.put("module_to", "mod-inventory-storage-1.0.0");
+    if (moduleFrom != null) {
+      jo.put("module_from", moduleFrom);
+    }
+    jo.put("module_to", moduleTo);
 
     client.post(storageUrl("/_/tenant"), jo, tenantId,
       ResponseHandler.any(tenantPrepared));
 
-    Response response = tenantPrepared.get(30, TimeUnit.SECONDS);
+    Response response = tenantPrepared.get(60, TimeUnit.SECONDS);
 
     String failureMessage = String.format("Tenant init failed: %s: %s",
       response.getStatusCode(), response.getBody());
 
     assertThat(failureMessage,
       response.getStatusCode(), is(201));
+  }
 
-    jo.put("module_to", "mod-inventory-storage-1.1.0");
-    jo.put("module_from", "mod-inventory-storage-1.0.0");
-    client.post(storageUrl("/_/tenant"), jo, tenantId,
-      ResponseHandler.any(tenantPrepared));
-
-    response = tenantPrepared.get(20, TimeUnit.SECONDS);
-
-    failureMessage = String.format("Tenant upgrade failed: %s: %s",
-      response.getStatusCode(), response.getBody());
-
-    assertThat(failureMessage,
-      response.getStatusCode(), is(201));
+  static void prepareTenant(String tenantId, boolean loadSample)
+      throws InterruptedException,
+      ExecutionException,
+      TimeoutException {
+    prepareTenant(tenantId, null, "mod-inventory-storage-1.0.0", loadSample);
   }
 
   static void removeTenant(String tenantId)
     throws InterruptedException,
     ExecutionException,
-    TimeoutException,
-    MalformedURLException {
+    TimeoutException {
 
     CompletableFuture<Response> tenantDeleted = new CompletableFuture<>();
 

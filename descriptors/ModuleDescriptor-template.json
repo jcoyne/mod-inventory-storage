@@ -4,7 +4,7 @@
   "provides": [
     {
       "id": "item-storage",
-      "version": "7.5",
+      "version": "8.4",
       "handlers": [
         {
           "methods": ["GET"],
@@ -34,8 +34,19 @@
       ]
     },
     {
+      "id": "item-storage-batch-sync",
+      "version": "0.4",
+      "handlers": [
+        {
+          "methods": ["POST"],
+          "pathPattern": "/item-storage/batch/synchronous",
+          "permissionsRequired": ["inventory-storage.items.batch.post"]
+        }
+      ]
+    },
+    {
       "id": "holdings-storage",
-      "version": "3.1",
+      "version": "4.2",
       "handlers": [
         {
           "methods": ["GET"],
@@ -65,8 +76,19 @@
       ]
     },
     {
+      "id": "holdings-storage-batch-sync",
+      "version": "0.2",
+      "handlers": [
+        {
+          "methods": ["POST"],
+          "pathPattern": "/holdings-storage/batch/synchronous",
+          "permissionsRequired": ["inventory-storage.holdings.batch.post"]
+        }
+      ]
+    },
+    {
       "id": "instance-storage",
-      "version": "7.2",
+      "version": "7.4",
       "handlers": [
         {
           "methods": ["GET"],
@@ -132,12 +154,50 @@
       ]
     },
     {
+      "id": "instance-preceding-succeeding-titles",
+      "version": "0.1",
+      "handlers": [
+        {
+          "methods": ["GET"],
+          "pathPattern": "/preceding-succeeding-titles",
+          "permissionsRequired": ["inventory-storage.preceding-succeeding-titles.collection.get"]
+        }, {
+          "methods": ["GET"],
+          "pathPattern": "/preceding-succeeding-titles/{id}",
+          "permissionsRequired": ["inventory-storage.preceding-succeeding-titles.item.get"]
+        }, {
+          "methods": ["POST"],
+          "pathPattern": "/preceding-succeeding-titles",
+          "permissionsRequired": ["inventory-storage.preceding-succeeding-titles.item.post"]
+        }, {
+          "methods": ["PUT"],
+          "pathPattern": "/preceding-succeeding-titles/{id}",
+          "permissionsRequired": ["inventory-storage.preceding-succeeding-titles.item.put"]
+        }, {
+          "methods": ["DELETE"],
+          "pathPattern": "/preceding-succeeding-titles/{id}",
+          "permissionsRequired": ["inventory-storage.preceding-succeeding-titles.item.delete"]
+        }
+      ]
+    },
+    {
       "id": "instance-storage-batch",
-      "version": "0.2",
+      "version": "0.3",
       "handlers": [
         {
           "methods": ["POST"],
           "pathPattern": "/instance-storage/batch/instances",
+          "permissionsRequired": ["inventory-storage.instances.batch.post"]
+        }
+      ]
+    },
+    {
+      "id": "instance-storage-batch-sync",
+      "version": "0.3",
+      "handlers": [
+        {
+          "methods": ["POST"],
+          "pathPattern": "/instance-storage/batch/synchronous",
           "permissionsRequired": ["inventory-storage.instances.batch.post"]
         }
       ]
@@ -225,7 +285,7 @@
     },
     {
       "id": "location-units",
-      "version": "1.1",
+      "version": "2.0",
       "handlers": [
         {
           "methods": ["GET"],
@@ -424,6 +484,17 @@
           "methods": ["DELETE"],
           "pathPattern": "/contributor-name-types/{id}",
           "permissionsRequired": ["inventory-storage.contributor-name-types.item.delete"]
+        }
+      ]
+    },
+    {
+      "id": "instance-bulk",
+      "version": "0.1",
+      "handlers": [
+        {
+          "methods": ["GET"],
+          "pathPattern": "/instance-bulk/ids",
+          "permissionsRequired": ["inventory-storage.instance-bulk.ids.get"]
         }
       ]
     },
@@ -943,6 +1014,22 @@
       ]
     },
     {
+      "id": "hrid-settings-storage",
+      "version": "1.1",
+      "handlers": [
+        {
+          "methods": ["GET"],
+          "pathPattern": "/hrid-settings-storage/hrid-settings",
+          "permissionsRequired": ["inventory-storage.hrid-settings.item.get"]
+        },
+        {
+          "methods": ["PUT"],
+          "pathPattern": "/hrid-settings-storage/hrid-settings",
+          "permissionsRequired": ["inventory-storage.hrid-settings.item.put"]
+        }
+      ]
+    },
+    {
       "id" : "_tenant",
       "version" : "1.2",
       "interfaceType": "system",
@@ -953,6 +1040,29 @@
         }, {
           "methods": ["DELETE"],
           "pathPattern": "/_/tenant"
+        }
+      ]
+    },
+    {
+      "id": "_jsonSchemas",
+      "version": "1.0",
+      "interfaceType" : "multiple",
+      "handlers" : [
+        {
+          "methods" : [ "GET" ],
+          "pathPattern" : "/_/jsonSchemas",
+          "permissionsRequired": []
+        }
+      ]
+    },
+    {
+      "id": "oaipmhview",
+      "version": "1.0",
+      "handlers" : [
+        {
+          "methods" : [ "GET" ],
+          "pathPattern" : "/oai-pmh-view/instances",
+          "permissionsRequired": ["inventory-storage.oai-pmh-view.instances.collection.get"]
         }
       ]
     }
@@ -989,6 +1099,11 @@
       "description": "delete individual item from storage"
     },
     {
+      "permissionName": "inventory-storage.items.batch.post",
+      "displayName": "inventory storage - create a number of items",
+      "description": "create a number of items in storage"
+    },
+    {
       "permissionName": "inventory-storage.holdings.collection.get",
       "displayName": "inventory storage - get holdings collection",
       "description": "get holdings collection from storage"
@@ -1017,6 +1132,11 @@
       "permissionName": "inventory-storage.holdings.item.delete",
       "displayName": "inventory storage - delete individual holdings record",
       "description": "delete individual holdings record from storage"
+    },
+    {
+      "permissionName": "inventory-storage.holdings.batch.post",
+      "displayName": "inventory storage - create a number of holdings",
+      "description": "create a number of holdings in storage"
     },
     {
       "permissionName": "inventory-storage.instances.collection.get",
@@ -1274,6 +1394,31 @@
       "description": "delete individual instance-relationship-type from storage"
     },
     {
+      "permissionName": "inventory-storage.preceding-succeeding-titles.collection.get",
+      "displayName": "inventory storage - get preceding-succeeding-title collection",
+      "description": "get preceding-succeeding-title collection from storage"
+    },
+    {
+      "permissionName": "inventory-storage.preceding-succeeding-titles.item.get",
+      "displayName": "inventory storage - get individual preceding-succeeding-title",
+      "description": "get individual preceding-succeeding-title from storage"
+    },
+    {
+      "permissionName": "inventory-storage.preceding-succeeding-titles.item.post",
+      "displayName": "inventory storage - create individual preceding-succeeding-title",
+      "description": "create individual preceding-succeeding-title in storage"
+    },
+    {
+      "permissionName": "inventory-storage.preceding-succeeding-titles.item.put",
+      "displayName": "inventory storage - modify preceding-succeeding-title",
+      "description": "modify preceding-succeeding-title in storage"
+    },
+    {
+      "permissionName": "inventory-storage.preceding-succeeding-titles.item.delete",
+      "displayName": "inventory storage - delete individual preceding-succeeding-title",
+      "description": "delete individual preceding-succeeding-title from storage"
+    },
+    {
       "permissionName": "inventory-storage.identifier-types.collection.get",
       "displayName": "inventory storage - get identifier-type collection",
       "description": "get identifier-type collection from storage"
@@ -1397,6 +1542,11 @@
       "permissionName": "inventory-storage.contributor-name-types.item.delete",
       "displayName": "inventory storage - delete individual contributor-name-type",
       "description": "delete individual contributor-name-type from storage"
+    },
+    {
+      "permissionName": "inventory-storage.instance-bulk.ids.get",
+      "displayName": "inventory storage - get bulk ids",
+      "description": "get a bulk set of instance ids from storage"
     },
     {
       "permissionName": "inventory-storage.instance-formats.collection.get",
@@ -1831,6 +1981,16 @@
       "description": "delete individual call-number-type from storage"
     },
     {
+      "permissionName": "inventory-storage.hrid-settings.item.get",
+      "displayName": "inventory storage - get HRID settings",
+      "description": "get the HRID settings from storage"
+    },
+    {
+      "permissionName": "inventory-storage.hrid-settings.item.put",
+      "displayName": "inventory storage - modify HRID settings",
+      "description": "modify the HRID settings in storage"
+    },
+    {
       "permissionName": "inventory-storage.all",
       "displayName": "inventory storage module - all permissions",
       "description": "Entire set of permissions needed to use the inventory storage module",
@@ -1841,12 +2001,14 @@
         "inventory-storage.items.item.put",
         "inventory-storage.items.item.delete",
         "inventory-storage.items.collection.delete",
+        "inventory-storage.items.batch.post",
         "inventory-storage.holdings.collection.get",
         "inventory-storage.holdings.item.get",
         "inventory-storage.holdings.item.post",
         "inventory-storage.holdings.item.put",
         "inventory-storage.holdings.item.delete",
         "inventory-storage.holdings.collection.delete",
+        "inventory-storage.holdings.batch.post",
         "inventory-storage.instances.collection.get",
         "inventory-storage.instances.item.get",
         "inventory-storage.instances.item.post",
@@ -1913,6 +2075,7 @@
         "inventory-storage.contributor-name-types.item.post",
         "inventory-storage.contributor-name-types.item.put",
         "inventory-storage.contributor-name-types.item.delete",
+        "inventory-storage.instance-bulk.ids.get",
         "inventory-storage.instance-formats.collection.get",
         "inventory-storage.instance-formats.item.get",
         "inventory-storage.instance-formats.item.post",
@@ -2007,19 +2170,43 @@
         "inventory-storage.service-points-users.item.get",
         "inventory-storage.service-points-users.item.post",
         "inventory-storage.service-points-users.item.put",
-        "inventory-storage.service-points-users.item.delete"
+        "inventory-storage.service-points-users.item.delete",
+        "inventory-storage.hrid-settings.item.get",
+        "inventory-storage.hrid-settings.item.put",
+        "inventory-storage.preceding-succeeding-titles.collection.get",
+        "inventory-storage.preceding-succeeding-titles.item.get",
+        "inventory-storage.preceding-succeeding-titles.item.post",
+        "inventory-storage.preceding-succeeding-titles.item.put",
+        "inventory-storage.preceding-succeeding-titles.item.delete"
       ]
+    },
+    {
+      "permissionName": "inventory-storage.oai-pmh-view.instances.collection.get",
+      "displayName": "inventory storage - get instances for oai pmh",
+      "description": "get instances for oai pmh"
     }
   ],
-  "metadata": {
-    "containerMemory": "512",
-    "databaseConnection": "true"
-  },
   "launchDescriptor": {
     "dockerImage": "${artifactId}:${version}",
+    "dockerPull": false,
     "dockerArgs": {
-      "HostConfig": { "PortBindings": { "8081/tcp":  [{ "HostPort": "%p" }] } }
+      "HostConfig": {
+        "Memory": 715827883,
+        "PortBindings": { "8081/tcp": [ { "HostPort": "%p" } ] }
+      }
     },
-    "dockerPull" : false
+    "env": [
+      { "name": "JAVA_OPTIONS",
+        "value": "-XX:MaxRAMPercentage=66.0"
+      },
+      { "name": "DB_HOST", "value": "postgres" },
+      { "name": "DB_PORT", "value": "5432" },
+      { "name": "DB_USERNAME", "value": "folio_admin" },
+      { "name": "DB_PASSWORD", "value": "folio_admin" },
+      { "name": "DB_DATABASE", "value": "okapi_modules" },
+      { "name": "DB_QUERYTIMEOUT", "value": "60000" },
+      { "name": "DB_CHARSET", "value": "UTF-8" },
+      { "name": "DB_MAXPOOLSIZE", "value": "5" }
+    ]
   }
 }

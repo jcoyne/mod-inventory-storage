@@ -1,6 +1,5 @@
 package org.folio.rest.unit;
 
-
 import static org.folio.rest.impl.ItemDamagedStatusAPI.REFERENCE_TABLE;
 import static org.folio.rest.support.db.ErrorFactory.getUUIDErrorMap;
 import static org.mockito.ArgumentMatchers.any;
@@ -16,8 +15,10 @@ import java.util.UUID;
 
 import javax.ws.rs.core.Response;
 
+import io.vertx.pgclient.PgException;
 import org.folio.rest.impl.ItemDamagedStatusAPI;
 import org.folio.rest.jaxrs.model.ItemDamageStatus;
+import org.folio.rest.persist.PgExceptionUtil;
 import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.persist.cql.CQLWrapper;
 import org.folio.rest.persist.interfaces.Results;
@@ -30,9 +31,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.stubbing.Answer;
-
-import com.github.mauricio.async.db.postgresql.exceptions.GenericDatabaseException;
-import com.github.mauricio.async.db.postgresql.messages.backend.ErrorMessage;
 
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
@@ -133,7 +131,7 @@ public class ItemDamagedStatusAPIUnitTest {
 
   @Test
   public void postItemDamagedStatusesShouldReturnBadRequestWhenInputDataIsCorrupted(TestContext testContext) {
-    GenericDatabaseException exception = new GenericDatabaseException(new ErrorMessage(getUUIDErrorMap()));
+    PgException exception = PgExceptionUtil.createPgExceptionFromMap(getUUIDErrorMap());
     doAnswer(setExceptionForHandlerArgument(3, exception))
       .when(postgresClient)
       .save(
@@ -142,7 +140,6 @@ public class ItemDamagedStatusAPIUnitTest {
         any(ItemDamageStatus.class),
         any(Future.class)
       );
-
     Async async = testContext.async();
     Future<Response> responseFuture = Future.future();
     itemDamagedStatusAPI.postItemDamagedStatuses(
@@ -241,7 +238,7 @@ public class ItemDamagedStatusAPIUnitTest {
 
   @Test
   public void deleteItemDamagedStatusesByIdShouldReturnBadRequestWhenInputDataIsCorrupted(TestContext testContext) {
-    GenericDatabaseException exception = new GenericDatabaseException(new ErrorMessage(getUUIDErrorMap()));
+    PgException exception = PgExceptionUtil.createPgExceptionFromMap(getUUIDErrorMap());
     doAnswer(setExceptionForHandlerArgument(2, exception))
       .when(postgresClient)
       .delete(
@@ -268,7 +265,7 @@ public class ItemDamagedStatusAPIUnitTest {
 
   @Test
   public void putItemDamagedStatusesByIdShouldReturnBadRequestWhenInputDataIsCorrupted(TestContext testContext) {
-    GenericDatabaseException exception = new GenericDatabaseException(new ErrorMessage(getUUIDErrorMap()));
+    PgException exception = PgExceptionUtil.createPgExceptionFromMap(getUUIDErrorMap());
     doAnswer(setExceptionForHandlerArgument(3, exception))
       .when(postgresClient)
       .update(
