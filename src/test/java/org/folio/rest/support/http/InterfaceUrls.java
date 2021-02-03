@@ -38,6 +38,10 @@ public class InterfaceUrls {
     return StorageTestSuite.storageUrl("/holdings-storage/batch/synchronous" + subPath);
   }
 
+  public static URL holdingsSourceUrl(String subPath) {
+    return StorageTestSuite.storageUrl("/holdings-sources" + subPath);
+  }
+
   public static URL instancesStorageUrl(String subPath) {
     return StorageTestSuite.storageUrl("/instance-storage/instances" + subPath);
   }
@@ -103,8 +107,8 @@ public class InterfaceUrls {
     return StorageTestSuite.storageUrl("/ill-policies" + subPath);
   }
 
-  public static URL instanceBulkUrl(String subPath) {
-    return StorageTestSuite.storageUrl("/instance-bulk" + subPath);
+  public static URL recordBulkUrl(String subPath) {
+    return StorageTestSuite.storageUrl("/record-bulk" + subPath);
   }
 
   public static URL instanceFormatsUrl(String subPath) {
@@ -175,7 +179,25 @@ public class InterfaceUrls {
     return StorageTestSuite.storageUrl("/hrid-settings-storage/hrid-settings" + subPath);
   }
 
+  /** TODO: These entries will be removed soon */
   public static URL oaiPmhView(String subPath) {
     return StorageTestSuite.storageUrl("/oai-pmh-view/instances" + subPath);
+  }
+
+  public static URL oaiPmhViewUpdatedInstanceIds(String subPath) {
+    return StorageTestSuite.storageUrl("/oai-pmh-view/updatedInstanceIds" + subPath);
+  }
+
+  public static URL oaiPmhViewEnrichedInstances() {
+    return StorageTestSuite.storageUrl("/oai-pmh-view/enrichedInstances");
+  }
+  /** EoF - these entries will be removed soon */
+
+  public static URL inventoryHierarchyUpdatedInstanceIds(String subPath) {
+    return StorageTestSuite.storageUrl("/inventory-hierarchy/updated-instance-ids" + subPath);
+  }
+
+  public static URL inventoryHierarchyItemsAndHoldings() {
+    return StorageTestSuite.storageUrl("/inventory-hierarchy/items-and-holdings");
   }
 }

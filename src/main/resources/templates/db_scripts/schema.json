@@ -99,6 +99,14 @@
           "targetTable": "loclibrary",
           "tOps": "ADD"
         }
+      ],
+      "index": [
+        {
+          "fieldName": "primaryServicePoint",
+          "tOps": "ADD",
+          "caseSensitive": false,
+          "removeAccents": false
+        }
       ]
     },
     {
@@ -113,6 +121,14 @@
         {
           "fieldName": "code",
           "tOps": "ADD"
+        }
+      ],
+      "index": [
+        {
+          "fieldName": "pickupLocation",
+          "tOps": "ADD",
+          "caseSensitive": false,
+          "removeAccents": false
         }
       ]
     },
@@ -264,6 +280,10 @@
         {
           "fieldName": "code, statisticalCodeTypeId",
           "tOps": "ADD"
+        },
+        {
+          "fieldName": "name",
+          "tOps": "ADD"
         }
       ],
       "foreignKeys": [
@@ -316,6 +336,7 @@
       "fromModuleVersion": "19.2.0",
       "withMetadata": true,
       "withAuditing": true,
+      "withOptimisticLocking": "logOnConflict",
       "auditingTableName": "audit_instance",
       "auditingFieldName": "record",
       "customSnippetPath": "audit-delete-trigger.sql",
@@ -339,6 +360,10 @@
       "uniqueIndex": [
         {
           "fieldName": "hrid",
+          "tOps": "ADD"
+        },
+        {
+          "fieldName": "matchKey",
           "tOps": "ADD"
         }
       ],
@@ -375,7 +400,7 @@
         },
         {
           "fieldName": "subjects",
-          "tOps": "ADD",
+          "tOps": "DELETE",
           "caseSensitive": false,
           "removeAccents": true
         }
@@ -466,6 +491,16 @@
           "fieldName": "isbn",
           "sqlExpression" : "normalize_isbns(jsonb->'identifiers')",
           "sqlExpressionQuery": "normalize_digits($)"
+        },
+        {
+          "fieldName": "dateOfPublication",
+          "sqlExpression" : "concat_array_object_values(jsonb->'publication', 'dateOfPublication')"
+        },
+        {
+          "fieldName": "subjects",
+          "tOps": "ADD",
+          "caseSensitive": false,
+          "removeAccents": true
         }
       ]
     },
@@ -573,10 +608,22 @@
       ]
     },
     {
+      "tableName": "holdings_records_source",
+      "withMetadata": true,
+      "withAuditing": false,
+      "uniqueIndex": [
+        {
+          "fieldName": "name",
+          "tOps": "ADD"
+        }
+      ]
+    },
+    {
       "tableName": "holdings_record",
       "fromModuleVersion": "19.2.0",
       "withMetadata": true,
       "withAuditing": true,
+      "withOptimisticLocking": "logOnConflict",
       "auditingTableName": "audit_holdings_record",
       "auditingFieldName": "record",
       "customSnippetPath": "audit-delete-trigger.sql",
@@ -611,12 +658,25 @@
           "fieldName": "illPolicyId",
           "targetTable": "ill_policy",
           "tOps": "ADD"
+        },
+        {
+          "fieldName": "sourceId",
+          "targetTable": "holdings_records_source",
+          "tOps": "ADD"
         }
       ],
       "uniqueIndex": [
         {
           "fieldName": "hrid",
           "tOps": "ADD"
+        }
+      ],
+      "ginIndex": [
+        {
+          "fieldName": "electronicAccess",
+          "tOps": "ADD",
+          "caseSensitive": false,
+          "removeAccents": true
         }
       ],
       "index": [
@@ -665,6 +725,7 @@
       "withMetadata": true,
       "fromModuleVersion": "19.2.0",
       "withAuditing": true,
+      "withOptimisticLocking": "logOnConflict",
       "auditingTableName": "audit_item",
       "auditingFieldName": "record",
       "customSnippetPath": "audit-delete-trigger.sql",
@@ -758,6 +819,18 @@
           "tOps": "ADD",
           "caseSensitive": false,
           "removeAccents": false
+        },
+        {
+          "fieldName": "purchaseOrderLineIdentifier",
+          "tOps": "ADD",
+          "caseSensitive": false,
+          "removeAccents": false
+        },
+        {
+          "fieldName": "effectiveCallNumberComponents.callNumber",
+          "tOps": "ADD",
+          "caseSensitive": false,
+          "removeAccents": false
         }
       ],
       "ginIndex": [
@@ -833,8 +906,8 @@
     },
     {
       "run": "after",
-      "snippetPath": "itemEffectiveLocation.sql",
-      "fromModuleVersion": "17.1.0"
+      "snippetPath": "dropLegacyItemEffectiveLocationTriggers.sql",
+      "fromModuleVersion": "19.5.0"
     },
     {
       "run": "after",
@@ -893,18 +966,23 @@
     },
     {
       "run": "after",
-      "snippetPath": "oaipmh/revert_createOaiPmhViewFunction.sql",
-      "fromModuleVersion": "19.2.0"
-    },
-    {
-      "run": "after",
       "snippetPath": "oaipmh/createOaiPmhViewFunction.sql",
-      "fromModuleVersion": "19.2.0"
+      "fromModuleVersion": "19.3.1"
     },
     {
       "run": "after",
       "snippetPath": "removeOldPrecedingSucceedingTitles.sql",
       "fromModuleVersion": "19.2.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "inventory-hierarchy/createRecordsViewFunction.sql",
+      "fromModuleVersion": "19.4.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "updateIllPolicyWillNotLend.sql",
+      "fromModuleVersion": "19.4.0"
     }
   ]
 }

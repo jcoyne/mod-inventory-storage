@@ -1,6 +1,6 @@
 #%RAML 1.0
 title: Inventory Storage Item Batch Sync API
-version: v0.4
+version: v0.5
 protocols: [ HTTP, HTTPS ]
 baseUri: http://localhost
 
@@ -28,6 +28,11 @@ types:
     responses:
       201:
         description: "All items have been successfully created or updated"
+      409:
+        description: "Optimistic locking version conflict"
+        body:
+          text/plain:
+            example: "version conflict"
       413:
         description: "Payload Too Large"
         body:

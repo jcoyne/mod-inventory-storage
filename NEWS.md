@@ -1,3 +1,74 @@
+## 19.5.0 (in-progress)
+
+* Status date set on newly created instance records (MODINVSTOR-509)
+* Item status date is set for newly created item records (MODINVSTOR-508)
+
+## 19.4.0 2020-10-08
+
+* Introduces public and staff only holdings statements notes (MODINVSTOR-543)
+* Introduces `Unknown` item status (MODINVSTOR-588)
+* Introduces holdings record `source` property (MODINVSTOR-542, MODINVSTOR-590)
+* Introduces instance `match key` property (MODINVSTOR-587)
+* Includes `location code` in hierarchy API (MODINVSTOR-589)
+* Requires JDK 11 (MODINVSTOR-555)
+* Upgrades to RAML Module Builder 31.1.0 (MODINVSTOR-542, MODINVSTOR-557, MODINVSTOR-569)
+* Provides `item-storage 8.6`
+* Provides `holdings-storage 4.4`
+* Provides `holdings-storage-batch-sync 0.3`
+* Provides `instance-storage 7.5`
+
+## 19.3.0 2020-07-28
+
+* Add 'Aged to lost' status to allowed item statuses list (MODINVSTOR-503)
+* Solving issue with GBV by making migration for preceeding and succeeding titles to be possible to run several times without failing (MODINVSTOR-541)
+* Separate filtering from response generation in oai-pmh view (MODINVSTOR-536)
+* Item record. Effective call number (item), eye readable. Search on exact data in Call number data element (MODINVSTOR-481)
+* Holdings record. Call number, eye readable. Search on exact data in Call number data element (MODINVSTOR-480)
+* Search queries without database index (MODINVSTOR-472)
+* Upgrade to raml-module-builder (RMB) 30.2.4 (MODINVSTOR-532)
+* Expand oai-pmh view with additional fields (MODINVSTOR-498)
+* OAI-PMH view doesn't respond in Bug Fest (MODINVSTOR-527)
+* Change permissions location for oai-pmh view (MODINVSTOR-524)
+* Add Index for Instances Full-text Subjects Search (MODINVSTOR-499)
+* Postgres requires special permissions to disable triggers for migrations (MODINVSTOR-476)
+* Fixing inconsistent hit counts (totalRecords) estimation (MODINVSTOR-519)
+* Bulk download Instance UUIDs OOM (MODINVSTOR-465)
+* There were upgraded these interfaces:
+  * "item-storage" to version 8.5
+  * "item-storage-batch-sync" to version 0.5
+  * "oaipmhview" to version 1.1
+
+## 19.2.2 2020-06-17
+
+* Disable triggers for migrations without requiring special permissions (MODINVSTOR-476)
+
+## 19.2.1 2020-06-15
+
+* Upgrade to RAML Module Builder 30.0.3 (MODINVSTOR-519):
+  * Use where-only clause for the "count query" for consistent hit count estimations (RMB-645)
+  * Fix sorby title and limit=0 gives zero hits (RMB-640)
+
+## 19.2.0 2020-06-08
+
+* Introduces normalised ISBN and invalid ISBN indexes (MODINVSTOR-413, MODINVSTOR-474)
+* Introduces normalised call number indexes (MODINVSTOR-485, MODINVSTOR-488)
+* Introduces `Withdrawn` and `Lost and paid`  item statuses (MODINVSTOR-461, MODINVSTOR-494)
+* Uses consistent record count estimation irrespective of sorting (MODINVSTOR-468, MODINVSTOR-513)
+* Introduces API to support OAI-PMH integration (MODINVSTOR-477, MODINVSTOR-486, MODINVSTOR-492)
+* Adds `upsert` support in batch APIs (MODINVSTOR- 478)
+* Removes instance relationships replaced by preceding / succeeding titles records (MODINVSTOR-451)
+* Adds indexes for `staffSuppress` ,  `suppressFromDiscovery`  and `createdDate` properties (MODINVSTOR-473, MODINVSTOR-479)
+* Sets derived effective call number  components in item batch API (MODINVSTOR-458)
+* provides `item-storage 8.4`
+* provides `item-storage-batch-sync 0.4`
+* provides `holdings-storage 4.2`
+* provides `holdings-storage-batch-sync 0.2`
+* provides `instance-storage-batch-sync 0.3`
+* provides `oaipmhview 1.0`
+* Upgrades to RAML Module Builder 30.0.2 (MODINVSTOR-468, MODINVSTOR-487, MODINVSTOR-513)
+  * Rebuilds many database indexes during upgrade
+  * Rebuilds database statistics during upgrade
+
 ## 19.1.0 2020-03-14
 
 * Improves performance of `keyword` search (MODINVSTOR-455)
