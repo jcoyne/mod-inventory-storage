@@ -18,23 +18,21 @@ import static org.folio.rest.support.kafka.FakeKafkaConsumer.getItemEvents;
 import static org.folio.rest.support.kafka.FakeKafkaConsumer.getLastHoldingEvent;
 import static org.folio.rest.support.kafka.FakeKafkaConsumer.getLastInstanceEvent;
 import static org.folio.rest.support.kafka.FakeKafkaConsumer.getLastItemEvent;
+import static org.folio.services.domainevent.CommonDomainEventPublisher.NULL_INSTANCE_ID;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
-import org.folio.services.kafka.KafkaMessage;
-
 import io.vertx.core.MultiMap;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import org.folio.services.kafka.KafkaMessage;
 
 public final class DomainEventAssertions {
   private DomainEventAssertions() {}
@@ -43,7 +41,7 @@ public final class DomainEventAssertions {
     assertThat(createEvent.getPayload().getString("type"), is("CREATE"));
     assertThat(createEvent.getPayload().getString("tenant"), is(TENANT_ID));
     assertThat(createEvent.getPayload().getJsonObject("old"), nullValue());
-    assertThat(createEvent.getPayload().getJsonObject("new").putNull("_version"), is(newRecord.putNull("_version")));
+    assertThat(createEvent.getPayload().getJsonObject("new"), is(newRecord));
 
     assertHeaders(createEvent.getHeaders());
   }
@@ -52,7 +50,16 @@ public final class DomainEventAssertions {
     assertThat(deleteEvent.getPayload().getString("type"), is("DELETE"));
     assertThat(deleteEvent.getPayload().getString("tenant"), is(TENANT_ID));
     assertThat(deleteEvent.getPayload().getJsonObject("new"), nullValue());
-    assertThat(deleteEvent.getPayload().getJsonObject("old").putNull("_version"), is(record.putNull("_version")));
+    assertThat(deleteEvent.getPayload().getJsonObject("old"), is(record));
+
+    assertHeaders(deleteEvent.getHeaders());
+  }
+
+  private static void assertRemoveAllEvent(KafkaMessage<JsonObject> deleteEvent) {
+    assertThat(deleteEvent.getPayload().getString("type"), is("DELETE_ALL"));
+    assertThat(deleteEvent.getPayload().getString("tenant"), is(TENANT_ID));
+    assertThat(deleteEvent.getPayload().getJsonObject("new"), nullValue());
+    assertThat(deleteEvent.getPayload().getJsonObject("old"), nullValue());
 
     assertHeaders(deleteEvent.getHeaders());
   }
@@ -62,8 +69,8 @@ public final class DomainEventAssertions {
 
     assertThat(updateEvent.getPayload().getString("type"), is("UPDATE"));
     assertThat(updateEvent.getPayload().getString("tenant"), is(TENANT_ID));
-    assertThat(updateEvent.getPayload().getJsonObject("old").putNull("_version"), is(oldRecord.putNull("_version")));
-    assertThat(updateEvent.getPayload().getJsonObject("new").putNull("_version"), is(newRecord.putNull("_version")));
+    assertThat(updateEvent.getPayload().getJsonObject("old"), is(oldRecord));
+    assertThat(updateEvent.getPayload().getJsonObject("new"), is(newRecord));
 
     assertHeaders(updateEvent.getHeaders());
   }
@@ -135,6 +142,12 @@ public final class DomainEventAssertions {
     assertRemoveEvent(getLastInstanceEvent(instanceId), instance);
   }
 
+  public static void assertRemoveAllEventForInstance() {
+    await().until(() -> getInstanceEvents(NULL_INSTANCE_ID).size() > 0);
+
+    assertRemoveAllEvent(getLastInstanceEvent(NULL_INSTANCE_ID));
+  }
+
   public static void assertUpdateEventForInstance(JsonObject oldInstance, JsonObject newInstance) {
     final String instanceId = oldInstance.getString("id");
 
@@ -169,6 +182,12 @@ public final class DomainEventAssertions {
       addInstanceIdForItem(item, instanceIdForItem));
   }
 
+  public static void assertRemoveAllEventForItem() {
+    await().until(() -> getItemEvents(NULL_INSTANCE_ID, null).size() > 0);
+
+    assertRemoveAllEvent(getLastItemEvent(NULL_INSTANCE_ID, null));
+  }
+
   public static void assertUpdateEventForItem(JsonObject oldItem, JsonObject newItem) {
     final String itemId = newItem.getString("id");
     final String instanceIdForItem = getInstanceIdForItem(newItem);
@@ -199,6 +218,12 @@ public final class DomainEventAssertions {
     await().until(() -> getHoldingsEvents(instanceId, id).size() > 0);
 
     assertRemoveEvent(getLastHoldingEvent(instanceId, id), hr);
+  }
+
+  public static void assertRemoveAllEventForHolding() {
+    await().until(() -> getHoldingsEvents(NULL_INSTANCE_ID, null).size() > 0);
+
+    assertRemoveAllEvent(getLastHoldingEvent(NULL_INSTANCE_ID, null));
   }
 
   public static void assertUpdateEventForHolding(JsonObject oldHr, JsonObject newHr) {
