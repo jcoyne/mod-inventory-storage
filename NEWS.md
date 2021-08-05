@@ -1,9 +1,58 @@
-## 19.5.0 (in-progress)
+## 22.0.0 IN-PROGRESS
 
+* Keyword searches now search alternate title fields (MODINVSTOR-719)
+* Kafka topic names now include environment and tenant ID (MODINVSTOR-738)
+
+## 21.0.0 2021-06-10
+
+* Introduces `publication period` for `instances` (MODINVSTOR-723)
+* Determines `publication year` based upon `publication period` (MODINVSTOR-724)
+* Introduces `bound with parts` record type (MODINVSTOR-702)
+* Adds `effective location` attribute to holdings record and inventory-hierarchy API (MODINVSTOR-669, MODINVSTOR-670)
+* Defaults instance.previouslyHeld to false (MODINVSTOR-454)
+* Adds full-text index for classifications field in instance table (MODINVSTOR-716)
+* Closes database connections when encountering errors in the /inventory-hierarchy endpoint (MODINVSTOR-677)
+* `embed_postgres` command line option is no longer supported (MODINVSTOR-728)
+* Logs when messages cannot be published to Kafka (MODINVSTOR-663)
+* Upgrades to RAML Module Builder 33.0.0 (MODINVSTOR-728)
+* Upgrades to Vert.x 4.1.0.CR1 (MODINVSTOR-728)
+* Provides `bound-with-parts-storage 1.0`  (MODINVSTOR-702)
+* Provides `holdings-storage 4.6` (MODINVSTOR-669)
+* Provides `instance-storage 7.8` (MODINVSTOR-723)
+* Provides `inventory-hierarchy 0.2` (MODINVSTOR-670)
+
+## 20.2.0 2021-04-23
+
+* Determines shelving order for existing items during tenant upgrade (MODINVSTOR-521)
+
+## 20.1.0 2021-03-25
+
+* Introduces `contributorsNames` CQL index for searching `instances` (MODINVSTOR-705)
+* Introduces `REPLICATION_FACTOR` environment variable for configuring Kafka topic replication (MODINVSTOR-694)
+
+## 20.0.0 2021-03-11
+
+* Determines effective shelving order for items (MODINVSTOR-381, MODINVSTOR-679)
+* Statistical codes must have an unique name (MODINVSTOR-596)
 * Adds identifier type `Cancelled system control number` (MODINVSTOR-636)
 * Status date set on newly created instance records (MODINVSTOR-509)
 * Item status date is set for newly created item records (MODINVSTOR-508)
-* Allow generation of HRID values with and without leading zeroes (MODINVSTOR-661)
+* HRID can be generated with and without leading zeroes (MODINVSTOR-661)
+* Publishes domain events to Kafka to support searching and remote storage (MODINVSTOR-639, MODINVSTOR-640, MODINVSTOR-644, MODINVSTOR-649, MODINVSTOR-654, MODINVSTOR-662, MODINVSTOR-664)
+* Detects potential optimistic concurrency collisions for instances, holdings records and items (MODINVSTOR-656)
+* Upgrades to RAML Module Builder 32.1.0
+* Upgrades to Vert.x 4.0.0 (MODINVSTOR-624)
+* Provides `item-storage 8.9`
+* Provides `item-storage-batch-sync 0.6`
+* Provides `holdings-storage 4.5`
+* Provides `instance-storage 7.6`
+* Provides `inventory-record-bulk 1.0`
+* Provides `hrid-settings-storage 1.2`
+* Provides `_tenant 2.0`
+* Provides `inventory-view 1.0`
+* Provides `instance-reindex 0.1`
+* No longer provides `instance-bulk`
+* Requires Kafka 2.6
 
 ## 19.4.0 2020-10-08
 

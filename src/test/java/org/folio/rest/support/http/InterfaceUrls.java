@@ -66,6 +66,10 @@ public class InterfaceUrls {
     return StorageTestSuite.storageUrl("/instance-relationship-types" + subPath);
   }
 
+  public static URL boundWithStorageUrl(String subPath) {
+    return StorageTestSuite.storageUrl("/inventory-storage/bound-with-parts" + subPath);
+  }
+
   public static URL contributorTypesUrl(String subPath) {
     return StorageTestSuite.storageUrl("/contributor-types" + subPath);
   }
@@ -199,5 +203,13 @@ public class InterfaceUrls {
 
   public static URL inventoryHierarchyItemsAndHoldings() {
     return StorageTestSuite.storageUrl("/inventory-hierarchy/items-and-holdings");
+  }
+
+  public static URL inventoryViewInstances(String path) {
+    return StorageTestSuite.storageUrl("/inventory-view/instances" + path);
+  }
+
+  public static URL instanceReindex(String path) {
+    return StorageTestSuite.storageUrl("/instance-storage/reindex" + path);
   }
 }

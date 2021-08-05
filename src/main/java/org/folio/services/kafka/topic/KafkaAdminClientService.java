@@ -3,12 +3,16 @@ package org.folio.services.kafka.topic;
 import static io.vertx.core.Future.succeededFuture;
 import static io.vertx.kafka.admin.KafkaAdminClient.create;
 import static org.apache.logging.log4j.LogManager.getLogger;
-import static org.folio.services.kafka.KafkaConfigHelper.getKafkaProperties;
+import static org.folio.services.kafka.KafkaProperties.getReplicationFactor;
 
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.logging.log4j.Logger;
+import org.folio.kafka.KafkaConfig;
+import org.folio.services.kafka.KafkaProperties;
 import org.folio.util.ResourceUtil;
 
 import io.vertx.core.Future;
@@ -21,40 +25,48 @@ import io.vertx.kafka.admin.NewTopic;
 public class KafkaAdminClientService {
   private static final Logger log = getLogger(KafkaAdminClientService.class);
   private static final String KAFKA_TOPICS_FILE = "kafka-topics.json";
-  private final Vertx vertx;
+  private final Supplier<KafkaAdminClient> clientFactory;
 
   public KafkaAdminClientService(Vertx vertx) {
-    this.vertx = vertx;
+    this(() -> create(vertx, KafkaConfig.builder()
+      .kafkaHost(KafkaProperties.getHost())
+      .kafkaPort(KafkaProperties.getPort())
+      .build().getProducerProps()));
   }
 
-  public Future<Void> createKafkaTopics() {
-    final KafkaAdminClient kafkaAdminClient = createKafkaAdminNativeClient();
-    return createKafkaTopics(kafkaAdminClient).onComplete(result -> {
-      if (result.succeeded()) {
-        log.info("Topics created successfully");
-      } else {
-        log.error("Unable to create topics", result.cause());
-      }
+  public KafkaAdminClientService(Supplier<KafkaAdminClient> clientFactory) {
+    this.clientFactory = clientFactory;
+  }
 
-      kafkaAdminClient.close().onComplete(closeResult -> {
-        if (closeResult.failed()) {
-          log.error("Failed to close kafka admin client", closeResult.cause());
+  public Future<Void> createKafkaTopics(String tenantId, String environmentName) {
+    final KafkaAdminClient kafkaAdminClient = clientFactory.get();
+    return createKafkaTopics(tenantId, environmentName, kafkaAdminClient)
+      .onComplete(result -> {
+        if (result.succeeded()) {
+          log.info("Topics created successfully");
+        } else {
+          log.error("Unable to create topics", result.cause());
         }
-      });
+
+        kafkaAdminClient.close().onComplete(closeResult -> {
+          if (closeResult.failed()) {
+            log.error("Failed to close kafka admin client", closeResult.cause());
+          }
+        });
     });
   }
 
-  // needed for tests mostly
-  KafkaAdminClient createKafkaAdminNativeClient() {
-    return create(vertx, getKafkaProperties());
-  }
+  private Future<Void> createKafkaTopics(String tenantId, String environmentName,
+    KafkaAdminClient kafkaAdminClient) {
 
-  private Future<Void> createKafkaTopics(KafkaAdminClient kafkaAdminClient) {
-    final List<NewTopic> newTopics = readTopics();
+    final List<NewTopic> expectedTopics = readTopics()
+      .map(topic -> qualifyName(topic, environmentName, tenantId))
+      .collect(Collectors.toList());
 
-    return kafkaAdminClient.listTopics().compose(topics -> {
-      final List<NewTopic> topicsToCreate = newTopics.stream()
-        .filter(newTopic -> !topics.contains(newTopic.getName()))
+    return kafkaAdminClient.listTopics().compose(existingTopics -> {
+      final List<NewTopic> topicsToCreate = expectedTopics.stream()
+        .filter(topic -> !existingTopics.contains(topic.getName()))
+        .map(topic -> topic.setReplicationFactor(getReplicationFactor()))
         .collect(Collectors.toList());
 
       if (topicsToCreate.isEmpty()) {
@@ -67,12 +79,15 @@ public class KafkaAdminClientService {
     });
   }
 
-  private List<NewTopic> readTopics() {
+  private NewTopic qualifyName(NewTopic topic, String environmentName, String tenantId) {
+    return topic.setName(String.join(".", environmentName, tenantId, topic.getName()));
+  }
+
+  private Stream<NewTopic> readTopics() {
     final JsonObject topics = new JsonObject(ResourceUtil.asString(KAFKA_TOPICS_FILE));
 
     return topics.getJsonArray("topics", new JsonArray()).stream()
       .map(obj -> (JsonObject) obj)
-      .map(NewTopic::new)
-      .collect(Collectors.toList());
+      .map(NewTopic::new);
   }
 }

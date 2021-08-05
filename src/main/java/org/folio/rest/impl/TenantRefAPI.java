@@ -1,20 +1,6 @@
 package org.folio.rest.impl;
 
-import static io.vertx.core.Future.succeededFuture;
-
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Context;
-import io.vertx.core.Future;
-import io.vertx.core.Handler;
-import io.vertx.core.json.JsonArray;
-import io.vertx.core.json.JsonObject;
-import org.apache.commons.io.IOUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.folio.rest.annotations.Validate;
-import org.folio.rest.jaxrs.model.TenantAttributes;
-import org.folio.rest.tools.utils.TenantLoading;
-import org.folio.services.kafka.topic.KafkaAdminClientService;
+import static org.folio.Environment.environmentName;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,8 +10,24 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
-import javax.ws.rs.core.Response;
+import org.apache.commons.io.IOUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.folio.okapi.common.GenericCompositeFuture;
+import org.folio.rest.annotations.Validate;
+import org.folio.rest.jaxrs.model.TenantAttributes;
+import org.folio.rest.tools.utils.TenantLoading;
+import org.folio.services.kafka.topic.KafkaAdminClientService;
+import org.folio.services.migration.BaseMigrationService;
+import org.folio.services.migration.instance.PublicationPeriodMigrationService;
+import org.folio.services.migration.item.ItemShelvingOrderMigrationService;
+
+import io.vertx.core.Context;
+import io.vertx.core.Future;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
 
 public class TenantRefAPI extends TenantAPI {
 
@@ -63,7 +65,11 @@ public class TenantRefAPI extends TenantAPI {
     "holdings-note-types",
     "item-note-types",
     "item-damaged-statuses",
-    "holdings-sources"
+    "holdings-sources",
+    "bound-with/instances",
+    "bound-with/holdingsrecords",
+    "bound-with/items",
+    "bound-with/bound-with-parts"
   };
 
   List<JsonObject> servicePoints = null;
@@ -83,35 +89,19 @@ public class TenantRefAPI extends TenantAPI {
     return res;
   }
 
-  @Override
-  @Validate
-  public void postTenant(TenantAttributes tenantAttributes, Map<String, String> headers,
-    Handler<AsyncResult<Response>> handler, Context context) {
-
-    // have to create topics before tenant init,
-    // because on init we can create sample/ref data which
-    // has to be sent to the queue as well
-    createTopics(context, tenantAttributes)
-      .onComplete(topicCreateResult -> {
-        if (topicCreateResult.failed()) {
-          log.error("Unable to create kafka topics", topicCreateResult.cause());
-          handler.handle(succeededFuture(PostTenantResponse
-            .respond500WithTextPlain(topicCreateResult.cause().getMessage())));
-        } else {
-          super.postTenant(tenantAttributes, headers, handler, context);
-        }
-      });
-  }
-
   @Validate
   @Override
   Future<Integer> loadData(TenantAttributes attributes, String tenantId,
                            Map<String, String> headers, Context vertxContext) {
-    return super.loadData(attributes, tenantId, headers, vertxContext)
+    // create topics before loading data
+    return
+      new KafkaAdminClientService(vertxContext.owner())
+        .createKafkaTopics(tenantId, environmentName())
+        .compose(x ->super.loadData(attributes, tenantId, headers, vertxContext))
         .compose(superRecordsLoaded -> {
           try {
             List<URL> urls = TenantLoading.getURLsFromClassPathDir(
-                REFERENCE_LEAD + "/service-points");
+              REFERENCE_LEAD + "/service-points");
             servicePoints = new LinkedList<>();
             for (URL url : urls) {
               InputStream stream = url.openStream();
@@ -135,23 +125,39 @@ public class TenantRefAPI extends TenantAPI {
           tl.add("holdingsrecords", "holdings-storage/holdings");
           tl.add("items", "item-storage/items");
           tl.add("instance-relationships", "instance-storage/instance-relationships");
+          tl.add("bound-with/instances", "instance-storage/instances");
+          tl.add("bound-with/holdingsrecords", "holdings-storage/holdings");
+          tl.add("bound-with/items", "item-storage/items");
+          tl.add("bound-with/bound-with-parts", "inventory-storage/bound-with-parts");
           if (servicePoints != null) {
             tl.withFilter(this::servicePointUserFilter)
-                .withPostOnly()
-                .withAcceptStatus(422)
-                .add("users", "service-points-users");
+              .withPostOnly()
+              .withAcceptStatus(422)
+              .add("users", "service-points-users");
           }
           return tl.perform(attributes, headers, vertxContext, superRecordsLoaded);
-        });
+        }).compose(result -> runJavaMigrations(attributes, vertxContext, headers).map(result));
   }
 
-  private Future<Void> createTopics(Context context, TenantAttributes tenantAttributes) {
-    if (tenantAttributes.getPurge() != null && tenantAttributes.getPurge()) {
-      log.info("Purge is true, skipping topics creation...");
-      return succeededFuture();
-    }
+  private Future<Void> runJavaMigrations(TenantAttributes ta, Context context,
+    Map<String, String> okapiHeaders) {
 
-    log.info("Creating kafka topics...");
-    return new KafkaAdminClientService(context.owner()).createKafkaTopics();
+    log.info("About to start java migrations...");
+
+    List<BaseMigrationService> javaMigrations = List.of(
+      new ItemShelvingOrderMigrationService(context, okapiHeaders),
+      new PublicationPeriodMigrationService(context, okapiHeaders));
+
+    var startedMigrations = javaMigrations.stream()
+      .filter(javaMigration -> javaMigration.shouldExecuteMigration(ta))
+      .peek(migration -> log.info(
+        "Following migration is to be executed [migration={}]", migration))
+      .map(BaseMigrationService::runMigration)
+      .collect(Collectors.toList());
+
+    return GenericCompositeFuture.all(startedMigrations)
+      .onSuccess(notUsed -> log.info("Java migrations has been completed"))
+      .onFailure(error -> log.error("Some java migrations failed", error))
+      .mapEmpty();
   }
 }

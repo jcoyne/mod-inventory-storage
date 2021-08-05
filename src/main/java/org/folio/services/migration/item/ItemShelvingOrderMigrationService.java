@@ -1,0 +1,56 @@
+package org.folio.services.migration.item;
+
+import io.vertx.core.Context;
+import io.vertx.core.Future;
+import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.RowStream;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import org.folio.persist.ItemRepository;
+import org.folio.rest.jaxrs.model.Item;
+import org.folio.rest.persist.PgUtil;
+import org.folio.rest.persist.PostgresClientFuturized;
+import org.folio.rest.persist.SQLConnection;
+import org.folio.rest.support.EffectiveCallNumberComponentsUtil;
+import org.folio.services.migration.BaseMigrationService;
+
+public class ItemShelvingOrderMigrationService extends BaseMigrationService {
+  private static final String SELECT_SQL = "SELECT jsonb FROM %s WHERE "
+    + "jsonb->>'effectiveShelvingOrder' IS NULL";
+
+  private final PostgresClientFuturized postgresClient;
+  private final ItemRepository itemRepository;
+
+  public ItemShelvingOrderMigrationService(Context context, Map<String, String> okapiHeaders) {
+    this(new PostgresClientFuturized(PgUtil.postgresClient(context, okapiHeaders)),
+      new ItemRepository(context, okapiHeaders));
+  }
+
+  public ItemShelvingOrderMigrationService(
+    PostgresClientFuturized postgresClient, ItemRepository itemRepository) {
+
+    super("20.2.1", postgresClient);
+    this.postgresClient = postgresClient;
+    this.itemRepository = itemRepository;
+  }
+
+  @Override
+  protected Future<RowStream<Row>> openStream(SQLConnection connection) {
+    return postgresClient.selectStream(connection, selectSql());
+  }
+
+  @Override
+  protected Future<Integer> updateBatch(List<Row> batch) {
+    var items = batch.stream()
+      .map(row -> rowToClass(row, Item.class))
+      .map(EffectiveCallNumberComponentsUtil::calculateAndSetEffectiveShelvingOrder)
+      .collect(Collectors.toList());
+
+    return itemRepository.update(items).map(notUsed -> items.size());
+  }
+
+  private String selectSql() {
+    return String.format(SELECT_SQL, postgresClient.getFullTableName("item"));
+  }
+}

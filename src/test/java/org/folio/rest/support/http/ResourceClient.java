@@ -80,6 +80,11 @@ public class ResourceClient {
       "preceding succeeding titles", "precedingSucceedingTitles");
   }
 
+  public static ResourceClient forBoundWithParts(HttpClient client) {
+    return new ResourceClient(client, InterfaceUrls::boundWithStorageUrl,
+      "bound with parts", "boundWithParts");
+  }
+
   public static ResourceClient forLoanTypes(HttpClient client) {
     return new ResourceClient(client, InterfaceUrls::loanTypesStorageUrl,
       "loan types", "loantypes");
@@ -128,6 +133,16 @@ public class ResourceClient {
   public static ResourceClient forStatisticalCodes(HttpClient client) {
     return new ResourceClient(client, InterfaceUrls::statisticalCodesUrl,
       "Statistical codes", "statisticalCodes");
+  }
+
+  public static ResourceClient forInventoryView(HttpClient client) {
+    return new ResourceClient(client, InterfaceUrls::inventoryViewInstances,
+      "Inventory view", "instances");
+  }
+
+  public static ResourceClient forInstanceReindex(HttpClient client) {
+    return new ResourceClient(client, InterfaceUrls::instanceReindex,
+      "Instance reindex", "reindex");
   }
 
   private ResourceClient(

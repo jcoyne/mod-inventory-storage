@@ -1,53 +1,39 @@
 package org.folio.rest.api;
 
-import io.vertx.core.Vertx;
-import io.vertx.core.json.JsonArray;
-import io.vertx.core.json.JsonObject;
-import io.vertx.ext.unit.Async;
-import io.vertx.ext.unit.TestContext;
-import io.vertx.ext.unit.junit.VertxUnitRunner;
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.folio.HttpStatus;
-import org.folio.rest.jaxrs.model.Errors;
-import org.folio.rest.jaxrs.model.InstancesBatchResponse;
-import org.folio.rest.jaxrs.model.MarcJson;
-import org.folio.rest.jaxrs.model.NatureOfContentTerm;
-import org.folio.rest.persist.PgUtil;
-import org.folio.rest.persist.PostgresClient;
-import org.folio.rest.support.*;
-import org.folio.rest.support.builders.HoldingRequestBuilder;
-import org.folio.rest.support.builders.ItemRequestBuilder;
-import org.folio.rest.support.matchers.DomainEventAssertions;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 import static java.net.HttpURLConnection.HTTP_OK;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.hamcrest.CoreMatchers.allOf;
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.CoreMatchers.hasItem;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.nullValue;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.anyOf;
+import static org.hamcrest.Matchers.both;
+import static org.hamcrest.Matchers.either;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.collection.IsIterableContainingInAnyOrder.containsInAnyOrder;
+import static org.hamcrest.core.IsNull.notNullValue;
+import static org.joda.time.Seconds.seconds;
+import static org.junit.Assert.fail;
+
 import static org.folio.rest.api.StorageTestSuite.TENANT_ID;
-import static org.folio.rest.support.HttpResponseMatchers.*;
+import static org.folio.rest.support.HttpResponseMatchers.errorMessageContains;
+import static org.folio.rest.support.HttpResponseMatchers.errorParametersValueIs;
+import static org.folio.rest.support.HttpResponseMatchers.statusCodeIs;
 import static org.folio.rest.support.JsonObjectMatchers.hasSoleMessageContaining;
 import static org.folio.rest.support.JsonObjectMatchers.identifierMatches;
 import static org.folio.rest.support.ResponseHandler.json;
 import static org.folio.rest.support.ResponseHandler.text;
-import static org.folio.rest.support.http.InterfaceUrls.*;
+import static org.folio.rest.support.http.InterfaceUrls.holdingsStorageUrl;
+import static org.folio.rest.support.http.InterfaceUrls.instancesStorageBatchInstancesUrl;
+import static org.folio.rest.support.http.InterfaceUrls.instancesStorageSyncUrl;
+import static org.folio.rest.support.http.InterfaceUrls.instancesStorageUrl;
+import static org.folio.rest.support.http.InterfaceUrls.itemsStorageUrl;
+import static org.folio.rest.support.http.InterfaceUrls.natureOfContentTermsUrl;
 import static org.folio.rest.support.matchers.DateTimeMatchers.hasIsoFormat;
 import static org.folio.rest.support.matchers.DateTimeMatchers.withinSecondsBeforeNow;
 import static org.folio.rest.support.matchers.DomainEventAssertions.assertCreateEventForInstance;
@@ -59,20 +45,59 @@ import static org.folio.rest.support.matchers.DomainEventAssertions.assertUpdate
 import static org.folio.rest.support.matchers.PostgresErrorMessageMatchers.isMaximumSequenceValueError;
 import static org.folio.rest.support.matchers.PostgresErrorMessageMatchers.isUniqueViolation;
 import static org.folio.util.StringUtil.urlEncode;
-import static org.hamcrest.CoreMatchers.allOf;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.CoreMatchers.hasItem;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.nullValue;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.both;
-import static org.hamcrest.Matchers.either;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.*;
-import static org.hamcrest.collection.IsIterableContainingInAnyOrder.containsInAnyOrder;
-import static org.hamcrest.core.IsNull.notNullValue;
-import static org.joda.time.Seconds.seconds;
-import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
+import io.vertx.ext.unit.Async;
+import io.vertx.ext.unit.TestContext;
+import io.vertx.ext.unit.junit.VertxUnitRunner;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
+import org.folio.HttpStatus;
+import org.folio.rest.jaxrs.model.Errors;
+import org.folio.rest.jaxrs.model.InstancesBatchResponse;
+import org.folio.rest.jaxrs.model.MarcJson;
+import org.folio.rest.jaxrs.model.NatureOfContentTerm;
+import org.folio.rest.jaxrs.model.Publication;
+import org.folio.rest.jaxrs.model.PublicationPeriod;
+import org.folio.rest.persist.PgUtil;
+import org.folio.rest.persist.PostgresClient;
+import org.folio.rest.support.AdditionalHttpStatusCodes;
+import org.folio.rest.support.IndividualResource;
+import org.folio.rest.support.JsonArrayHelper;
+import org.folio.rest.support.JsonErrorResponse;
+import org.folio.rest.support.Response;
+import org.folio.rest.support.ResponseHandler;
+import org.folio.rest.support.builders.HoldingRequestBuilder;
+import org.folio.rest.support.builders.ItemRequestBuilder;
 
 @RunWith(VertxUnitRunner.class)
 public class InstanceStorageTest extends TestBaseWithInventoryUtil {
@@ -130,9 +155,11 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
       .map(NatureOfContentTerm::getId)
       .toArray(String[]::new);
 
+    var publication = new Publication().withDateOfPublication("2000-2001");
+
     JsonObject instanceToCreate = smallAngryPlanet(id);
-    instanceToCreate.put("natureOfContentTermIds", Arrays
-      .asList(natureOfContentIds));
+    instanceToCreate.put("natureOfContentTermIds", Arrays.asList(natureOfContentIds));
+    instanceToCreate.put("publication", new JsonArray().add(JsonObject.mapFrom(publication)));
 
     CompletableFuture<Response> createCompleted = new CompletableFuture<>();
 
@@ -147,6 +174,7 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
 
     assertThat(instance.getString("id"), is(id.toString()));
     assertThat(instance.getString("title"), is("Long Way to a Small Angry Planet"));
+    assertThat(instance.getBoolean("previouslyHeld"), is(false));
 
     JsonArray identifiers = instance.getJsonArray("identifiers");
     assertThat(identifiers.size(), is(1));
@@ -180,6 +208,11 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
 
     assertThat(instanceFromGet.getBoolean(DISCOVERY_SUPPRESS), is(false));
     assertCreateEventForInstance(instanceFromGet);
+
+    var storedPublicationPeriod = instance.getJsonObject("publicationPeriod")
+      .mapTo(PublicationPeriod.class);
+    assertThat(storedPublicationPeriod.getStart(), is(2000));
+    assertThat(storedPublicationPeriod.getEnd(), is(2001));
   }
 
   @Test
@@ -475,6 +508,36 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
   }
 
   @Test
+  public void canSearchByClassificationNumberWithArrayModifier()
+    throws MalformedURLException,
+    InterruptedException,
+    ExecutionException,
+    TimeoutException {
+
+    createInstancesWithClassificationNumbers();
+
+    JsonObject allInstances = searchForInstances("classifications =/@classificationNumber \"K1 .M385\"");
+
+    assertThat(allInstances.getInteger("totalRecords"), is(1));
+    assertThat(allInstances.getJsonArray("instances").getJsonObject(0).getString("title"), is("Long Way to a Small Angry Planet"));
+  }
+
+  @Test
+  public void canSearchByClassificationNumberWithoutArrayModifier()
+    throws MalformedURLException,
+    InterruptedException,
+    ExecutionException,
+    TimeoutException {
+
+    createInstancesWithClassificationNumbers();
+
+    JsonObject allInstances = searchForInstances("classifications =\"K1 .M385\"");
+
+    assertThat(allInstances.getInteger("totalRecords"), is(1));
+    assertThat(allInstances.getJsonArray("instances").getJsonObject(0).getString("title"), is("Long Way to a Small Angry Planet"));
+  }
+
+  @Test
   public void canSearchUsingKeywordIndex()
     throws MalformedURLException,
     InterruptedException,
@@ -529,6 +592,42 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
     CompletableFuture<Response> getCompleted = new CompletableFuture<>();
 
     client.get(instancesStorageUrl("?query=keyword%20all%20%22Long%20Way%20to%20a%20Small%20Angry%20Planet%20Chambers%2C%20Becky%209781473619777%22"), StorageTestSuite.TENANT_ID,
+        ResponseHandler.json(getCompleted));
+
+    Response response = getCompleted.get(5, TimeUnit.SECONDS);
+
+    JsonObject responseBody = response.getJson();
+
+    JsonArray allInstances = responseBody.getJsonArray("instances");
+
+    assertThat(allInstances.size(), is(1));
+  }
+
+  @Test
+  public void canSearchForAlternateTitlesUsingKeywordIndexAll()
+    throws MalformedURLException,
+    InterruptedException,
+    ExecutionException,
+    TimeoutException {
+
+    UUID firstInstanceId = UUID.randomUUID();
+    UUID alternativeTitleId = UUID.randomUUID();
+
+    JsonObject instanceToCreate = smallAngryPlanet(firstInstanceId);
+    JsonObject alternativeTitles = new JsonObject();
+    
+    alternativeTitles.put("alternativeTitleTypeId", alternativeTitleId);
+    alternativeTitles.put("alternativeTitle", "xyza");
+
+    JsonArray altTitlesArray = new JsonArray("[" + alternativeTitles.toString() + "]");
+    
+    instanceToCreate.put("alternativeTitles", altTitlesArray);
+
+    createInstance(instanceToCreate);
+
+    CompletableFuture<Response> getCompleted = new CompletableFuture<>();
+
+    client.get(instancesStorageUrl("?query=keyword%20all%20%22xyza%22"), StorageTestSuite.TENANT_ID,
         ResponseHandler.json(getCompleted));
 
     Response response = getCompleted.get(5, TimeUnit.SECONDS);
@@ -2086,8 +2185,8 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
 
     assertThat(response.getStatusCode(), is(400));
     assertThat(response.getBody(),
-        is("duplicate key value violates unique constraint \"instance_hrid_idx_unique\": " +
-          "Key (lower(f_unaccent(jsonb ->> 'hrid'::text)))=(in00000000001) already exists."));
+        is("lower(f_unaccent(jsonb ->> 'hrid'::text)) value already " +
+          "exists in table instance: in00000000001"));
 
     log.info("Finished cannotCreateInstanceWithDuplicateHRID");
   }
@@ -2537,8 +2636,8 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
 
     assertThat(response.getStatusCode(), is(400));
     assertThat(response.getBody(),
-        is("duplicate key value violates unique constraint \"instance_matchkey_idx_unique\": " +
-          "Key (lower(f_unaccent(jsonb ->> 'matchKey'::text)))=(match_key) already exists."));
+        is("lower(f_unaccent(jsonb ->> 'matchKey'::text)) value already " +
+          "exists in table instance: match_key"));
 
     log.info("Finished cannotCreateInstanceWithDuplicateMatchKey");
   }
@@ -2649,6 +2748,32 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
         .map(IndividualResource::getId)
         .collect(Collectors.toList()),
       containsInAnyOrder(notSuppressedInstance.getId(), notSuppressedInstanceDefault.getId()));
+  }
+
+  private void createInstancesWithClassificationNumbers() throws InterruptedException,
+    ExecutionException, TimeoutException{
+
+    UUID firstInstanceId = UUID.randomUUID();
+    UUID secondInstanceId = UUID.randomUUID();
+    UUID classificationTypeId = UUID.randomUUID();
+
+    JsonObject firstClassifications = new JsonObject();
+    firstClassifications.put("classificationTypeId", classificationTypeId.toString());
+    firstClassifications.put("classificationNumber", "K1 .M385");
+
+    JsonObject secondClassifications = new JsonObject();
+    secondClassifications.put("classificationTypeId", classificationTypeId.toString());
+    secondClassifications.put("classificationNumber", "KB1 .A437");
+
+    JsonObject firstInstanceToCreate = smallAngryPlanet(firstInstanceId)
+    .put("classifications", new JsonArray()
+    .add(firstClassifications));
+    JsonObject secondInstanceToCreate = nod(secondInstanceId)
+    .put("classifications", new JsonArray()
+    .add(secondClassifications));
+
+    createInstance(firstInstanceToCreate);
+    createInstance(secondInstanceToCreate);
   }
 
   private JsonObject createRequestForMultipleInstances(Integer numberOfInstances) {
@@ -2776,12 +2901,11 @@ public class InstanceStorageTest extends TestBaseWithInventoryUtil {
   private JsonObject nod(UUID id) {
     JsonArray identifiers = new JsonArray();
     identifiers.add(identifier(UUID_ASIN, "B01D1PLMDO"));
-
     JsonArray contributors = new JsonArray();
     contributors.add(contributor(UUID_PERSONAL_NAME, "Barnes, Adrian"));
-
     JsonArray tags = new JsonArray();
     tags.add("test-tag");
+
     return createInstanceRequest(id, "TEST", "Nod",
       identifiers, contributors, UUID_INSTANCE_TYPE, tags);
   }

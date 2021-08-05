@@ -4,7 +4,7 @@
   "provides": [
     {
       "id": "item-storage",
-      "version": "8.8",
+      "version": "8.9",
       "handlers": [
         {
           "methods": ["GET"],
@@ -35,7 +35,7 @@
     },
     {
       "id": "item-storage-batch-sync",
-      "version": "0.5",
+      "version": "0.6",
       "handlers": [
         {
           "methods": ["POST"],
@@ -46,7 +46,7 @@
     },
     {
       "id": "holdings-storage",
-      "version": "4.5",
+      "version": "4.6",
       "handlers": [
         {
           "methods": ["GET"],
@@ -88,7 +88,7 @@
     },
     {
       "id": "instance-storage",
-      "version": "7.6",
+      "version": "7.8",
       "handlers": [
         {
           "methods": ["GET"],
@@ -155,7 +155,7 @@
     },
     {
       "id": "instance-preceding-succeeding-titles",
-      "version": "0.1",
+      "version": "0.2",
       "handlers": [
         {
           "methods": ["GET"],
@@ -177,6 +177,10 @@
           "methods": ["DELETE"],
           "pathPattern": "/preceding-succeeding-titles/{id}",
           "permissionsRequired": ["inventory-storage.preceding-succeeding-titles.item.delete"]
+        }, {
+          "methods": ["PUT"],
+          "pathPattern": "/preceding-succeeding-titles/instances/{id}",
+          "permissionsRequired": ["inventory-storage.instances.preceding-succeeding-titles.collection.put"]
         }
       ]
     },
@@ -1057,6 +1061,33 @@
       ]
     },
     {
+      "id": "bound-with-parts-storage",
+      "version": "1.0",
+      "handlers": [
+        {
+          "methods": ["GET"],
+          "pathPattern": "/inventory-storage/bound-with-parts",
+          "permissionsRequired": ["inventory-storage.bound-with-parts.collection.get"]
+        }, {
+          "methods": ["GET"],
+          "pathPattern": "/inventory-storage/bound-with-parts/{id}",
+          "permissionsRequired": ["inventory-storage.bound-with-parts.item.get"]
+        }, {
+          "methods": ["POST"],
+          "pathPattern": "/inventory-storage/bound-with-parts",
+          "permissionsRequired": ["inventory-storage.bound-with-parts.item.post"]
+        }, {
+          "methods": ["PUT"],
+          "pathPattern": "/inventory-storage/bound-with-parts/{id}",
+          "permissionsRequired": ["inventory-storage.bound-with-parts.item.put"]
+        }, {
+          "methods": ["DELETE"],
+          "pathPattern": "/inventory-storage/bound-with-parts/{id}",
+          "permissionsRequired": ["inventory-storage.bound-with-parts.item.delete"]
+        }
+      ]
+    },
+    {
       "id" : "_tenant",
       "version" : "2.0",
       "interfaceType": "system",
@@ -1104,7 +1135,7 @@
     },
     {
       "id": "inventory-hierarchy",
-      "version": "0.1",
+      "version": "0.2",
       "handlers": [
         {
           "methods": ["GET"],
@@ -1114,6 +1145,38 @@
           "methods" : [ "POST" ],
           "pathPattern" : "/inventory-hierarchy/items-and-holdings",
           "permissionsRequired": ["inventory-storage.inventory-hierarchy.items-and-holdings.collection.post"]
+        }
+      ]
+    },
+    {
+      "id": "inventory-view",
+      "version": "1.0",
+      "handlers": [
+        {
+          "methods": ["GET"],
+          "pathPattern": "/inventory-view/instances",
+          "permissionsRequired": ["inventory-storage.inventory-view.instances.collection.get"]
+        }
+      ]
+    },
+    {
+      "id": "instance-reindex",
+      "version": "0.1",
+      "handlers": [
+        {
+          "methods": ["POST"],
+          "pathPattern": "/instance-storage/reindex",
+          "permissionsRequired": ["inventory-storage.instance.reindex.post"]
+        },
+        {
+          "methods": ["GET"],
+          "pathPattern": "/instance-storage/reindex/{id}",
+          "permissionsRequired": ["inventory-storage.instance.reindex.item.get"]
+        },
+        {
+          "methods": ["DELETE"],
+          "pathPattern": "/instance-storage/reindex/{id}",
+          "permissionsRequired": ["inventory-storage.instance.reindex.item.delete"]
         }
       ]
     }
@@ -1243,6 +1306,11 @@
       "permissionName": "inventory-storage.instances.item.delete",
       "displayName": "inventory storage - delete individual instance",
       "description": "delete individual instance from storage"
+    },
+    {
+      "permissionName": "inventory-storage.instances.preceding-succeeding-titles.collection.put",
+      "displayName": "inventory storage - update preceding/succeeding titles related to instance",
+      "description": "update preceding/succeeding titles related to instance from storage"
     },
     {
       "permissionName": "inventory-storage.instances.batch.post",
@@ -2117,6 +2185,51 @@
       "description": "delete individual holdings-source from storage"
     },
     {
+      "permissionName": "inventory-storage.bound-with-parts.collection.get",
+      "displayName":    "inventory storage - get parts of bound-with(s)",
+      "description":    "get holdings-records associated with bound-with items"
+    },
+    {
+      "permissionName": "inventory-storage.bound-with-parts.item.get",
+      "displayName":    "inventory storage - get a part of a bound-with",
+      "description":    "get a holdings-record id associated with a bound-with item"
+    },
+    {
+      "permissionName": "inventory-storage.bound-with-parts.item.post",
+      "displayName":    "inventory storage - add a part to a bound-with",
+      "description":    "add a holdings record to a bound-with by associating it with the bound-with item"
+    },
+    {
+      "permissionName": "inventory-storage.bound-with-parts.item.put",
+      "displayName":    "inventory storage - modify a bound-with part",
+      "description":    "replace a holdings-record of a bound-with or move it to a different bound-with"
+    },
+    {
+      "permissionName": "inventory-storage.bound-with-parts.item.delete",
+      "displayName":    "inventory storage - remove part of a bound-with",
+      "description":    "remove a holdings-record from a bound-with"
+    },
+    {
+      "permissionName": "inventory-storage.instance.reindex.item.delete",
+      "displayName": "inventory storage - cancel reindex job",
+      "description": "cancel a running reindexing job"
+    },
+    {
+      "permissionName": "inventory-storage.instance.reindex.item.get",
+      "displayName": "inventory storage - get reindex job by id",
+      "description": "get reindex job by id"
+    },
+    {
+      "permissionName": "inventory-storage.instance.reindex.post",
+      "displayName": "inventory storage - submit reindex instance job",
+      "description": "submit reindex instance job"
+    },
+    {
+      "permissionName": "inventory-storage.inventory-view.instances.collection.get",
+      "displayName": "inventory view - get instances by query with their holdings and items",
+      "description": "get instances by query with their holdings and items"
+    },
+    {
       "permissionName": "inventory-storage.all",
       "displayName": "inventory storage module - all permissions",
       "description": "Entire set of permissions needed to use the inventory storage module",
@@ -2140,6 +2253,7 @@
         "inventory-storage.instances.item.post",
         "inventory-storage.instances.item.put",
         "inventory-storage.instances.item.delete",
+        "inventory-storage.instances.preceding-succeeding-titles.collection.put",
         "inventory-storage.instances.source-record.delete",
         "inventory-storage.instances.source-record.marc-json.get",
         "inventory-storage.instances.source-record.marc-json.put",
@@ -2317,8 +2431,18 @@
         "inventory-storage.holdings-sources.post",
         "inventory-storage.holdings-sources.put",
         "inventory-storage.holdings-sources.delete",
+        "inventory-storage.bound-with-parts.collection.get",
+        "inventory-storage.bound-with-parts.item.get",
+        "inventory-storage.bound-with-parts.item.post",
+        "inventory-storage.bound-with-parts.item.put",
+        "inventory-storage.bound-with-parts.item.delete",
         "inventory-storage.inventory-hierarchy.updated-instances-ids.collection.get",
-        "inventory-storage.inventory-hierarchy.items-and-holdings.collection.post"
+        "inventory-storage.inventory-hierarchy.items-and-holdings.collection.post",
+        "inventory-storage.inventory-view.instances.collection.get",
+        "inventory-storage.inventory-hierarchy.items-and-holdings.collection.post",
+        "inventory-storage.instance.reindex.item.delete",
+        "inventory-storage.instance.reindex.item.get",
+        "inventory-storage.instance.reindex.post"
       ]
     }
   ],
@@ -2335,6 +2459,7 @@
       { "name": "JAVA_OPTIONS",
         "value": "-XX:MaxRAMPercentage=66.0"
       },
+      { "name": "ENV", "value": "folio" },
       { "name": "DB_HOST", "value": "postgres" },
       { "name": "DB_PORT", "value": "5432" },
       { "name": "DB_USERNAME", "value": "folio_admin" },
@@ -2344,7 +2469,8 @@
       { "name": "DB_CHARSET", "value": "UTF-8" },
       { "name": "DB_MAXPOOLSIZE", "value": "5" },
       { "name": "KAFKA_HOST", "value": "kafka" },
-      { "name": "KAFKA_PORT", "value": "9092" }
+      { "name": "KAFKA_PORT", "value": "9092" },
+      { "name": "REPLICATION_FACTOR", "value": "1" }
     ]
   }
 }

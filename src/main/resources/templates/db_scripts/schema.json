@@ -393,12 +393,6 @@
           "removeAccents": true
         },
         {
-          "fieldName": "classifications",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
           "fieldName": "subjects",
           "tOps": "DELETE",
           "caseSensitive": false,
@@ -463,12 +457,21 @@
       ],
       "fullTextIndex": [
         {
+          "fieldName": "classifications",
+          "arraySubfield" : "classificationNumber",
+          "arrayModifiers": ["classificationTypeId"]
+        },
+        {
           "fieldName": "keyword",
-          "multiFieldNames": "title,contributors[*].name,identifiers[*].value"
+          "multiFieldNames": "title,indexTitle,alternativeTitles[*].alternativeTitle,series,contributors[*].name,identifiers[*].value"
         },
         {
           "fieldName": "allTitles",
           "multiFieldNames": "title,indexTitle,alternativeTitles[*].alternativeTitle,series"
+        },
+        {
+          "fieldName": "contributorsNames",
+          "multiFieldNames": "contributors[*].name"
         },
         {
           "fieldName": "title"
@@ -645,6 +648,11 @@
         },
         {
           "fieldName": "temporaryLocationId",
+          "targetTable": "location",
+          "tOps": "ADD"
+        },
+        {
+          "fieldName": "effectiveLocationId",
           "targetTable": "location",
           "tOps": "ADD"
         },
@@ -890,9 +898,46 @@
         }
       ],
       "customSnippetPath": "alterPrecedingSucceedingTitle.sql"
+    },
+    {
+      "tableName": "reindex_job",
+      "withMetadata": false,
+      "withAuditing": false
+    },
+    {
+      "tableName": "bound_with_part",
+      "withMetadata": true,
+      "foreignKeys": [
+        {
+          "fieldName": "itemId",
+          "targetTable": "item",
+          "tOps": "ADD"
+        },
+        {
+          "fieldName": "holdingsRecordId",
+          "targetTable": "holdings_record",
+          "tOps": "ADD"
+        }
+      ],
+      "uniqueIndex": [
+        {
+          "fieldName": "itemId, holdingsRecordId",
+          "tOps": "ADD"
+        }
+      ]
+    },
+    {
+      "tableName": "notification_sending_error",
+      "withMetadata": false,
+      "withAuditing": false
     }
   ],
   "scripts": [
+    {
+        "run":"after",
+        "snippetPath":"setPreviouslyHeldDefault.sql",
+        "fromModuleVersion":"20.2.0"
+    },
     {
       "run": "before",
       "snippetPath": "populateRmbInternalIndex.sql",
@@ -907,6 +952,11 @@
       "run": "before",
       "snippetPath": "createCallNumberNormalizationFunctions.sql",
       "fromModuleVersion": "19.2.0"
+    },
+    {
+      "run":"after",
+      "snippetPath":"setEffectiveHoldingsLocation.sql",
+      "fromModuleVersion":"20.1.0"
     },
     {
       "run": "after",
@@ -997,6 +1047,31 @@
       "run": "after",
       "snippetPath": "addIdentifierTypeCancelledSystemControlNumber.sql",
       "fromModuleVersion": "19.4.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "inventory-hierarchy/addNullChecksToRecordsViewFunctions.sql",
+      "fromModuleVersion": "19.5.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "instance-hr-item/instance-hr-item-view.sql",
+      "fromModuleVersion": "19.5.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "inventory-hierarchy/addEffectiveHoldingsToItemsAndHoldingsView.sql",
+      "fromModuleVersion": "20.2.0"
+	},
+	{
+      "run": "after",
+      "snippetPath": "addInstanceFormatsAudioBelt.sql",
+      "fromModuleVersion": "20.3.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "dropLegacyItemEffectiveLocationFunctions.sql",
+      "fromModuleVersion": "21.1.0"
     }
   ]
 }

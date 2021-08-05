@@ -1,7 +1,10 @@
 package org.folio.rest.persist;
 
+import static io.vertx.core.Future.succeededFuture;
 import static io.vertx.core.Promise.promise;
+import static org.folio.rest.persist.PostgresClient.convertToPsqlStandard;
 
+import io.vertx.sqlclient.RowStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -31,28 +34,12 @@ public class PostgresClientFuturized {
     return saveResult.future();
   }
 
-  public <T> Future<T> saveAndReturnEntity(String table, String id, T entity) {
-    final Promise<T> saveResult = promise();
-
-    postgresClient.saveAndReturnUpdatedEntity(table, id, entity, saveResult);
-
-    return saveResult.future();
-  }
-
   public <T> Future<T> getById(String tableName, String id, Class<T> type) {
     final Promise<T> getByIdResult = promise();
 
     postgresClient.getById(tableName, id, type, getByIdResult);
 
     return getByIdResult.future();
-  }
-
-  public <T> Future<List<T>> get(String tableName, T object) {
-    final Promise<Results<T>> getAllItemsResult = promise();
-
-    postgresClient.get(tableName, object, false, getAllItemsResult);
-
-    return getAllItemsResult.future().map(Results::getResults);
   }
 
   public <T> Future<List<T>> get(String tableName, Class<T> type, Criterion criterion) {
@@ -71,11 +58,47 @@ public class PostgresClientFuturized {
     return removeAllResult.future();
   }
 
+  public Future<RowSet<Row>> deleteById(String tableName, String id) {
+    final Promise<RowSet<Row>> deleteResult = promise();
+
+    postgresClient.delete(tableName, id, deleteResult);
+
+    return deleteResult.future();
+  }
+
   public <T> Future<Map<String, T>> getById(String tableName, Collection<String> ids, Class<T> type) {
     final Promise<Map<String, T>> promise = promise();
 
     postgresClient.getById(tableName, new JsonArray(new ArrayList<>(ids)), type, promise);
 
     return promise.future();
+  }
+
+  public Future<SQLConnection> startTx() {
+    Promise<SQLConnection> result = promise();
+
+    postgresClient.startTx(result);
+
+    return result.future();
+  }
+
+  public Future<RowStream<Row>> selectStream(SQLConnection con, String query) {
+    Promise<RowStream<Row>> result = promise();
+
+    postgresClient.selectStream(succeededFuture(con), query, result);
+
+    return result.future();
+  }
+
+  public Future<Void> endTx(SQLConnection connection) {
+    Promise<Void> result = promise();
+
+    postgresClient.endTx(succeededFuture(connection), result);
+
+    return result.future();
+  }
+
+  public String getFullTableName(String tableName) {
+    return convertToPsqlStandard(postgresClient.getTenantId()) + "." + tableName;
   }
 }
