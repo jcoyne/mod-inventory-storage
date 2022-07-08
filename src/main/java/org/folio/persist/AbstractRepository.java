@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.folio.rest.jaxrs.model.Instance;
 import org.folio.rest.persist.Criteria.Criterion;
 import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.persist.PostgresClientFuturized;
@@ -21,6 +22,7 @@ import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
+import org.folio.rest.persist.interfaces.Results;
 
 public abstract class AbstractRepository<T> {
   protected final PostgresClientFuturized postgresClientFuturized;
@@ -47,6 +49,14 @@ public abstract class AbstractRepository<T> {
 
   public Future<List<T>> get(Criterion criterion) {
     return postgresClientFuturized.get(tableName, recordType, criterion);
+  }
+
+  public Future<List<T>> get(AsyncResult<SQLConnection> connection, Criterion criterion) {
+    final Promise<Results<T>> getItemsResult = promise();
+
+    postgresClient.get(connection, tableName, recordType, criterion, false, true, getItemsResult);
+
+    return getItemsResult.future().map(Results::getResults);
   }
 
   public Future<Map<String, T>> getById(Collection<String> ids) {
@@ -86,6 +96,14 @@ public abstract class AbstractRepository<T> {
     final Promise<RowSet<Row>> promise = promise();
 
     postgresClient.upsertBatch(tableName, records, promise);
+
+    return promise.future();
+  }
+
+  public Future<RowSet<Row>> updateBatch(List<T> records, SQLConnection connection) {
+    final Promise<RowSet<Row>> promise = promise();
+
+    postgresClient.upsertBatch(Future.succeededFuture(connection), tableName, records, promise);
 
     return promise.future();
   }

@@ -14,6 +14,7 @@ import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.support.*;
 import org.folio.rest.support.builders.HoldingRequestBuilder;
 import org.folio.rest.support.builders.ItemRequestBuilder;
+import org.folio.rest.support.db.OptimisticLocking;
 import org.folio.rest.support.matchers.DomainEventAssertions;
 import org.junit.After;
 import org.junit.Before;
@@ -102,18 +103,24 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
     setHoldingsSequence(1);
 
     UUID holdingId = UUID.randomUUID();
+    String adminNote = "An admin note";
 
-    JsonObject holding = holdingsClient.create(new HoldingRequestBuilder()
+    JsonObject holdingToCreate = new HoldingRequestBuilder()
       .withId(holdingId)
       .forInstance(instanceId)
       .withPermanentLocation(mainLibraryLocationId)
-      .withTags(new JsonObject().put("tagList", new JsonArray().add(TAG_VALUE)))).getJson();
+      .withTags(new JsonObject().put("tagList", new JsonArray().add(TAG_VALUE))).create();
+
+    holdingToCreate.put("administrativeNotes", new JsonArray().add(adminNote));
+
+    JsonObject holding = holdingsClient.create(holdingToCreate).getJson();
 
     assertThat(holding.getString("id"), is(holdingId.toString()));
     assertThat(holding.getString("instanceId"), is(instanceId.toString()));
     assertThat(holding.getString("permanentLocationId"), is(mainLibraryLocationId.toString()));
     assertThat(holding.getString("hrid"), is("ho00000000001"));
     assertThat(holding.getString("effectiveLocationId"), is(mainLibraryLocationId.toString()));
+    assertThat(holding.getJsonArray("administrativeNotes").contains(adminNote), is(true));
 
     Response getResponse = holdingsClient.getById(holdingId);
 
@@ -125,6 +132,7 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
     assertThat(holdingFromGet.getString("instanceId"), is(instanceId.toString()));
     assertThat(holdingFromGet.getString("permanentLocationId"), is(mainLibraryLocationId.toString()));
     assertThat(holdingFromGet.getString("hrid"), is("ho00000000001"));
+    assertThat(holdingFromGet.getJsonArray("administrativeNotes").contains(adminNote), is(true));
 
     List<String> tags = getTags(holdingFromGet);
 
@@ -282,7 +290,7 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
     UUID instanceId = UUID.randomUUID();
 
     instancesClient.create(smallAngryPlanet(instanceId));
-
+    String adminNote = "an admin note";
     setHoldingsSequence(1);
 
     IndividualResource holdingResource = holdingsClient.create(new HoldingRequestBuilder()
@@ -294,7 +302,8 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
 
     JsonObject replacement = holdingResource.copyJson()
       .put("permanentLocationId", annexLibraryLocationId.toString())
-      .put("tags", new JsonObject().put("tagList", new JsonArray().add(NEW_TEST_TAG)));
+      .put("tags", new JsonObject().put("tagList", new JsonArray().add(NEW_TEST_TAG)))
+      .put("administrativeNotes", new JsonArray().add(adminNote));
 
     holdingsClient.replace(holdingId, replacement);
 
@@ -308,6 +317,7 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
     assertThat(holdingFromGet.getString("instanceId"), is(instanceId.toString()));
     assertThat(holdingFromGet.getString("permanentLocationId"), is(annexLibraryLocationId.toString()));
     assertThat(holdingFromGet.getString("hrid"), is("ho00000000001"));
+    assertThat(holdingFromGet.getJsonArray("administrativeNotes").contains(adminNote), is(true));
 
     List<String> tags = getTags(holdingFromGet);
 
@@ -611,7 +621,20 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
     assertThat(response.getBody(), is("Unable to process request Tenant must be set"));
   }
 
-  @Test 
+  @Test
+  public void optimisticLockingVersion() {
+    UUID holdingId = createInstanceAndHolding(mainLibraryLocationId);
+    JsonObject holding = getById(holdingId.toString()).getJson();
+    holding.put(PERMANENT_LOCATION_ID_KEY, annexLibraryLocationId);
+    // updating with current _version 1 succeeds and increments _version to 2
+    assertThat(update(holding).getStatusCode(), is(204));
+    holding.put(PERMANENT_LOCATION_ID_KEY, secondFloorLocationId);
+    // updating with outdated _version 1 fails, current _version is 2
+    int expected = OptimisticLocking.hasFailOnConflict("holdings_record") ? 409 : 204;
+    assertThat(update(holding).getStatusCode(), is(expected));
+  }
+
+  @Test
   public void updatingPermanentLocationChangesEffectiveLocationWhenNoTemporaryLocationSet()
     throws InterruptedException, ExecutionException, TimeoutException {
     UUID instanceId = UUID.randomUUID();
@@ -635,7 +658,7 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
     assertThat(updatedHolding.getJson().getString("effectiveLocationId"), is(annexLibraryLocationId.toString()));
   }
 
-  @Test 
+  @Test
   public void updatingPermanentLocationDoesNotChangeEffectiveLocationWhenTemporaryLocationSet()
     throws InterruptedException, ExecutionException, TimeoutException {
     UUID instanceId = UUID.randomUUID();
@@ -644,24 +667,24 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
 
     instancesClient.create(smallAngryPlanet(instanceId));
     setHoldingsSequence(1);
-  
+
     JsonObject holding = holdingsClient.create(new HoldingRequestBuilder()
       .withId(holdingId)
       .forInstance(instanceId)
       .withPermanentLocation(mainLibraryLocationId)
       .withTemporaryLocation(annexLibraryLocationId)
       .withTags(new JsonObject().put("tagList", new JsonArray().add(TAG_VALUE)))).getJson();
-  
+
     assertThat(holding.getString("effectiveLocationId"), is(annexLibraryLocationId.toString()));
-  
-    holding.put("permanentLocationId", secondFloorLocationId.toString());  
+
+    holding.put("permanentLocationId", secondFloorLocationId.toString());
     update(holdingsUrl, holding);
     Response updatedHolding = holdingsClient.getById(holdingId);
     assertThat(updatedHolding.getJson().getString("effectiveLocationId"), is(annexLibraryLocationId.toString()));
   }
 
   @Test
-  public void updatingOrRemovingTemporaryLocationChangesEffectiveLocation() 
+  public void updatingOrRemovingTemporaryLocationChangesEffectiveLocation()
     throws InterruptedException, ExecutionException, TimeoutException {
     UUID instanceId = UUID.randomUUID();
     UUID holdingId = UUID.randomUUID();
@@ -680,18 +703,18 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
 
     holding.put("temporaryLocationId", annexLibraryLocationId.toString());
     update(holdingsUrl, holding);
-    var updatedHolding = holdingsClient.getById(holdingId);
-    assertThat(updatedHolding.getJson().getString("effectiveLocationId"), is(annexLibraryLocationId.toString()));
+    holding = holdingsClient.getById(holdingId).getJson();
+    assertThat(holding.getString("effectiveLocationId"), is(annexLibraryLocationId.toString()));
 
     holding.put("temporaryLocationId", secondFloorLocationId.toString());
     update(holdingsUrl, holding);
-    updatedHolding = holdingsClient.getById(holdingId);
-    assertThat(updatedHolding.getJson().getString("effectiveLocationId"), is(secondFloorLocationId.toString()));
+    holding = holdingsClient.getById(holdingId).getJson();
+    assertThat(holding.getString("effectiveLocationId"), is(secondFloorLocationId.toString()));
 
     holding.remove("temporaryLocationId");
     update(holdingsUrl, holding);
-    updatedHolding = holdingsClient.getById(holdingId);
-    assertThat(updatedHolding.getJson().getString("effectiveLocationId"), is(mainLibraryLocationId.toString()));
+    holding = holdingsClient.getById(holdingId).getJson();
+    assertThat(holding.getString("effectiveLocationId"), is(mainLibraryLocationId.toString()));
   }
 
 
@@ -2493,6 +2516,15 @@ public class HoldingsStorageTest extends TestBaseWithInventoryUtil {
       ResponseHandler.empty(putCompleted));
 
     return putCompleted.get(5, TimeUnit.SECONDS);
+  }
+
+  private Response update(JsonObject holding) {
+    URL holdingsUrl = holdingsStorageUrl("/" + holding.getString("id"));
+    try {
+      return update(holdingsUrl, holding);
+    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   private List<String> getTags(JsonObject json) {

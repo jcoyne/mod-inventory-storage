@@ -1,7 +1,25 @@
 package org.folio.rest.impl;
 
-import static org.folio.Environment.environmentName;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Context;
+import io.vertx.core.Future;
+import io.vertx.core.Handler;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
+import org.apache.commons.io.IOUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.folio.dbschema.Versioned;
+import org.folio.okapi.common.GenericCompositeFuture;
+import org.folio.rest.annotations.Validate;
+import org.folio.rest.jaxrs.model.TenantAttributes;
+import org.folio.rest.tools.utils.TenantLoading;
+import org.folio.rest.tools.utils.TenantTool;
+import org.folio.services.kafka.topic.KafkaAdminClientService;
+import org.folio.services.migration.BaseMigrationService;
+import org.folio.services.migration.item.ItemShelvingOrderMigrationService;
 
+import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URISyntaxException;
@@ -12,22 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.apache.commons.io.IOUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.folio.okapi.common.GenericCompositeFuture;
-import org.folio.rest.annotations.Validate;
-import org.folio.rest.jaxrs.model.TenantAttributes;
-import org.folio.rest.tools.utils.TenantLoading;
-import org.folio.services.kafka.topic.KafkaAdminClientService;
-import org.folio.services.migration.BaseMigrationService;
-import org.folio.services.migration.instance.PublicationPeriodMigrationService;
-import org.folio.services.migration.item.ItemShelvingOrderMigrationService;
-
-import io.vertx.core.Context;
-import io.vertx.core.Future;
-import io.vertx.core.json.JsonArray;
-import io.vertx.core.json.JsonObject;
+import static org.folio.Environment.environmentName;
 
 public class TenantRefAPI extends TenantAPI {
 
@@ -35,7 +38,6 @@ public class TenantRefAPI extends TenantAPI {
   private static final String SAMPLE_KEY = "loadSample";
   private static final String REFERENCE_KEY = "loadReference";
   private static final String REFERENCE_LEAD = "ref-data";
-
   private static final Logger log = LogManager.getLogger();
   final String[] refPaths = new String[]{
     "material-types",
@@ -61,6 +63,7 @@ public class TenantRefAPI extends TenantAPI {
     "ill-policies",
     "holdings-types",
     "call-number-types",
+    "authority-note-types",
     "instance-note-types",
     "holdings-note-types",
     "item-note-types",
@@ -69,7 +72,8 @@ public class TenantRefAPI extends TenantAPI {
     "bound-with/instances",
     "bound-with/holdingsrecords",
     "bound-with/items",
-    "bound-with/bound-with-parts"
+    "bound-with/bound-with-parts",
+    "related-instance-types"
   };
 
   List<JsonObject> servicePoints = null;
@@ -89,64 +93,90 @@ public class TenantRefAPI extends TenantAPI {
     return res;
   }
 
+  /**
+   * Returns attributes.getModuleFrom() < featureVersion or attributes.getModuleFrom() is null.
+   */
+  static boolean isNew(TenantAttributes attributes, String featureVersion) {
+    if (attributes.getModuleFrom() == null) {
+      return true;
+    }
+    var since = new Versioned() {
+    };
+    since.setFromModuleVersion(featureVersion);
+    return since.isNewForThisInstall(attributes.getModuleFrom());
+  }
+
   @Validate
   @Override
   Future<Integer> loadData(TenantAttributes attributes, String tenantId,
                            Map<String, String> headers, Context vertxContext) {
-    // create topics before loading data
-    return
-      new KafkaAdminClientService(vertxContext.owner())
-        .createKafkaTopics(tenantId, environmentName())
-        .compose(x ->super.loadData(attributes, tenantId, headers, vertxContext))
-        .compose(superRecordsLoaded -> {
-          try {
-            List<URL> urls = TenantLoading.getURLsFromClassPathDir(
-              REFERENCE_LEAD + "/service-points");
-            servicePoints = new LinkedList<>();
-            for (URL url : urls) {
-              InputStream stream = url.openStream();
-              String content = IOUtils.toString(stream, StandardCharsets.UTF_8);
-              stream.close();
-              servicePoints.add(new JsonObject(content));
-            }
-          } catch (URISyntaxException | IOException ex) {
-            return Future.failedFuture(ex.getMessage());
-          }
-          TenantLoading tl = new TenantLoading();
 
-          tl.withKey(REFERENCE_KEY).withLead(REFERENCE_LEAD);
-          tl.withIdContent();
-          for (String p : refPaths) {
-            tl.add(p);
-          }
-          tl.withKey(SAMPLE_KEY).withLead(SAMPLE_LEAD);
-          tl.add("instances", "instance-storage/instances");
-          tl.withIdContent();
-          tl.add("holdingsrecords", "holdings-storage/holdings");
-          tl.add("items", "item-storage/items");
-          tl.add("instance-relationships", "instance-storage/instance-relationships");
-          tl.add("bound-with/instances", "instance-storage/instances");
-          tl.add("bound-with/holdingsrecords", "holdings-storage/holdings");
-          tl.add("bound-with/items", "item-storage/items");
-          tl.add("bound-with/bound-with-parts", "inventory-storage/bound-with-parts");
-          if (servicePoints != null) {
-            tl.withFilter(this::servicePointUserFilter)
-              .withPostOnly()
-              .withAcceptStatus(422)
-              .add("users", "service-points-users");
-          }
-          return tl.perform(attributes, headers, vertxContext, superRecordsLoaded);
-        }).compose(result -> runJavaMigrations(attributes, vertxContext, headers).map(result));
+    // create topics before loading data
+    Future<Integer> future = new KafkaAdminClientService(vertxContext.owner())
+      .createKafkaTopics(tenantId, environmentName())
+      .compose(x -> super.loadData(attributes, tenantId, headers, vertxContext));
+
+    if (isNew(attributes, "20.0.0")) {
+      try {
+        List<URL> urls = TenantLoading.getURLsFromClassPathDir(
+          REFERENCE_LEAD + "/service-points");
+        servicePoints = new LinkedList<>();
+        for (URL url : urls) {
+          InputStream stream = url.openStream();
+          String content = IOUtils.toString(stream, StandardCharsets.UTF_8);
+          stream.close();
+          servicePoints.add(new JsonObject(content));
+        }
+      } catch (URISyntaxException | IOException ex) {
+        return Future.failedFuture(ex);
+      }
+      TenantLoading tl = new TenantLoading();
+
+      tl.withKey(REFERENCE_KEY).withLead(REFERENCE_LEAD);
+      tl.withIdContent();
+      for (String p : refPaths) {
+        tl.add(p);
+      }
+      tl.withKey(SAMPLE_KEY).withLead(SAMPLE_LEAD);
+      tl.add("instances", "instance-storage/instances");
+      tl.withIdContent();
+      tl.add("holdingsrecords", "holdings-storage/holdings");
+      tl.add("items", "item-storage/items");
+      tl.add("instance-relationships", "instance-storage/instance-relationships");
+      tl.add("bound-with/instances", "instance-storage/instances");
+      tl.add("bound-with/holdingsrecords", "holdings-storage/holdings");
+      tl.add("bound-with/items", "item-storage/items");
+      tl.add("bound-with/bound-with-parts", "inventory-storage/bound-with-parts");
+      if (servicePoints != null) {
+        tl.withFilter(this::servicePointUserFilter)
+          .withPostOnly()
+          .withAcceptStatus(422)
+          .add("users", "service-points-users");
+      }
+      future = future.compose(n -> tl.perform(attributes, headers, vertxContext, n));
+    }
+
+    return future.compose(result -> runJavaMigrations(attributes, vertxContext, headers)
+      .map(result));
+  }
+
+  @Validate
+  public void postTenant(TenantAttributes tenantAttributes, Map<String, String> headers,
+                         Handler<AsyncResult<Response>> handler, Context context) {
+    // delete Kafka topics if tenant purged
+    Future<Void> result = tenantAttributes.getPurge() != null && tenantAttributes.getPurge()
+      ? new KafkaAdminClientService(context.owner()).deleteKafkaTopics(TenantTool.tenantId(headers), environmentName())
+      : Future.succeededFuture();
+    result.onComplete(x -> super.postTenant(tenantAttributes, headers, handler, context));
   }
 
   private Future<Void> runJavaMigrations(TenantAttributes ta, Context context,
-    Map<String, String> okapiHeaders) {
+                                         Map<String, String> okapiHeaders) {
 
     log.info("About to start java migrations...");
 
     List<BaseMigrationService> javaMigrations = List.of(
-      new ItemShelvingOrderMigrationService(context, okapiHeaders),
-      new PublicationPeriodMigrationService(context, okapiHeaders));
+      new ItemShelvingOrderMigrationService(context, okapiHeaders));
 
     var startedMigrations = javaMigrations.stream()
       .filter(javaMigration -> javaMigration.shouldExecuteMigration(ta))

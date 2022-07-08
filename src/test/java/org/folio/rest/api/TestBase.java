@@ -1,9 +1,12 @@
 package org.folio.rest.api;
 
-import static org.folio.rest.api.StorageTestSuite.TENANT_ID;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
-
+import io.vertx.core.Future;
+import io.vertx.core.Handler;
+import io.vertx.core.MultiMap;
+import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.HttpMethod;
+import io.vertx.ext.web.client.HttpResponse;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.concurrent.CompletableFuture;
@@ -12,22 +15,20 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import static org.folio.rest.api.StorageTestSuite.TENANT_ID;
 import org.folio.rest.support.HttpClient;
 import org.folio.rest.support.Response;
 import org.folio.rest.support.ResponseHandler;
+import org.folio.rest.support.fixtures.AsyncMigrationFixture;
+import org.folio.rest.support.fixtures.AuthorityReindexFixture;
 import org.folio.rest.support.fixtures.InstanceReindexFixture;
 import org.folio.rest.support.fixtures.StatisticalCodeFixture;
 import org.folio.rest.support.http.ResourceClient;
 import org.folio.rest.support.kafka.FakeKafkaConsumer;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import io.vertx.core.Future;
-import io.vertx.core.Handler;
-import io.vertx.core.MultiMap;
-import io.vertx.core.Vertx;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpMethod;
-import io.vertx.ext.web.client.HttpResponse;
 
 /**
  * When not run from StorageTestSuite then this class invokes StorageTestSuite.before() and
@@ -44,6 +45,7 @@ public abstract class TestBase {
   protected static ResourceClient instancesClient;
   public static ResourceClient holdingsClient;
   protected static ResourceClient itemsClient;
+  protected static ResourceClient authoritiesClient;
   static ResourceClient locationsClient;
   static ResourceClient callNumberTypesClient;
   static ResourceClient modesOfIssuanceClient;
@@ -56,9 +58,12 @@ public abstract class TestBase {
   static ResourceClient instanceTypesClient;
   static ResourceClient illPoliciesClient;
   static ResourceClient inventoryViewClient;
+  static ResourceClient statisticalCodeClient;
   static StatisticalCodeFixture statisticalCodeFixture;
   static FakeKafkaConsumer kafkaConsumer;
   static InstanceReindexFixture instanceReindex;
+  static AuthorityReindexFixture authorityReindex;
+  static AsyncMigrationFixture asyncMigration;
 
   /**
    * Returns future.get({@link #TIMEOUT}, {@link TimeUnit#SECONDS}).
@@ -85,7 +90,7 @@ public abstract class TestBase {
   }
 
   @BeforeClass
-  public static void testBaseBeforeClass() throws Exception {
+  public static void testBaseBeforeClass() {
     logger.info("starting @BeforeClass testBaseBeforeClass()");
     Vertx vertx = StorageTestSuite.getVertx();
     if (vertx == null) {
@@ -100,6 +105,7 @@ public abstract class TestBase {
     instancesClient = ResourceClient.forInstances(client);
     holdingsClient = ResourceClient.forHoldings(client);
     itemsClient = ResourceClient.forItems(client);
+    authoritiesClient = ResourceClient.forAuthorities(client);
     locationsClient = ResourceClient.forLocations(client);
     callNumberTypesClient = ResourceClient.forCallNumberTypes(client);
     modesOfIssuanceClient = ResourceClient.forModesOfIssuance(client);
@@ -109,6 +115,7 @@ public abstract class TestBase {
     instancesStorageSyncClient = ResourceClient.forInstancesStorageSync(client);
     itemsStorageSyncClient = ResourceClient.forItemsStorageSync(client);
     inventoryViewClient = ResourceClient.forInventoryView(client);
+    statisticalCodeClient = ResourceClient.forStatisticalCodes(client);
     instancesStorageBatchInstancesClient = ResourceClient
       .forInstancesStorageBatchInstances(client);
     instanceTypesClient = ResourceClient
@@ -118,6 +125,8 @@ public abstract class TestBase {
     kafkaConsumer = new FakeKafkaConsumer().consume(vertx);
     kafkaConsumer.removeAllEvents();
     instanceReindex = new InstanceReindexFixture(client);
+    authorityReindex = new AuthorityReindexFixture(client);
+    asyncMigration = new AsyncMigrationFixture(client);
     logger.info("finishing @BeforeClass testBaseBeforeClass()");
   }
 

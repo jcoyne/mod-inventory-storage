@@ -4,23 +4,18 @@ import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import javax.ws.rs.core.Response;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.folio.cql2pgjson.CQL2PgJSON;
-import org.folio.cql2pgjson.exception.FieldException;
 import org.folio.rest.RestVerticle;
+import org.folio.rest.annotations.Validate;
 import org.folio.rest.jaxrs.model.HoldShelfExpiryPeriod;
 import org.folio.rest.jaxrs.model.Servicepoint;
 import org.folio.rest.jaxrs.model.Servicepoints;
-import org.folio.rest.persist.Criteria.Limit;
-import org.folio.rest.persist.Criteria.Offset;
 import org.folio.rest.persist.PgUtil;
 import org.folio.rest.persist.PostgresClient;
-import org.folio.rest.persist.cql.CQLWrapper;
 import org.folio.rest.tools.utils.TenantTool;
 import org.folio.rest.tools.utils.ValidationHelper;
 
@@ -56,13 +51,6 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
             RestVerticle.OKAPI_HEADER_TENANT));
   }
 
-  private CQLWrapper getCQL(String query, int limit, int offset,
-          String tableName) throws FieldException {
-    CQL2PgJSON cql2pgJson = new CQL2PgJSON(tableName + ".jsonb");
-    return new CQLWrapper(cql2pgJson, query).setLimit(new Limit(limit))
-            .setOffset(new Offset(offset));
-  }
-
   private boolean isDuplicate(String errorMessage){
     if(errorMessage != null && errorMessage.contains(
             "duplicate key value violates unique constraint")){
@@ -71,14 +59,7 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
     return false;
   }
 
-  private boolean isCQLError(Throwable err) {
-    if(err.getCause() != null && err.getCause().getClass().getSimpleName()
-            .endsWith("CQLParseException")) {
-      return true;
-    }
-    return false;
-  }
-
+  @Validate
   @Override
   public void deleteServicePoints(String lang, Map<String, String> okapiHeaders,
           Handler<AsyncResult<Response>> asyncResultHandler,
@@ -111,45 +92,18 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
     });
   }
 
+  @Validate
   @Override
   public void getServicePoints(String query, int offset, int limit, String lang,
           Map<String, String> okapiHeaders,
           Handler<AsyncResult<Response>> asyncResultHandler,
           Context vertxContext) {
-    vertxContext.runOnContext(v -> {
-      try {
-        String tenantId = getTenant(okapiHeaders);
-        PostgresClient pgClient = getPGClient(vertxContext, tenantId);
-        CQLWrapper cql = getCQL(query, limit, offset, SERVICE_POINT_TABLE);
-        pgClient.get(SERVICE_POINT_TABLE, Servicepoint.class, new String[]{"*"},
-                cql, true, true, getReply -> {
-          if(getReply.failed()) {
-            String message = logAndSaveError(getReply.cause());
-            asyncResultHandler.handle(Future.succeededFuture(
-                    GetServicePointsResponse.respond500WithTextPlain(
-                    getErrorResponse(message))));
-          } else {
-            Servicepoints servicepoints = new Servicepoints();
-            List<Servicepoint> servicepointList = getReply.result().getResults();
-            servicepoints.setServicepoints(servicepointList);
-            servicepoints.setTotalRecords(getReply.result().getResultInfo()
-                    .getTotalRecords());
-            asyncResultHandler.handle(Future.succeededFuture(
-                    GetServicePointsResponse.respond200WithApplicationJson(servicepoints)));
-          }
-        });
-      } catch(Exception e) {
-        String message = logAndSaveError(e);
-        if(isCQLError(e)) {
-          message = String.format("CQL Error: %s", message);
-        }
-        asyncResultHandler.handle(Future.succeededFuture(
-                GetServicePointsResponse.respond500WithTextPlain(
-                getErrorResponse(message))));
-      }
-    });
+
+    PgUtil.get(SERVICE_POINT_TABLE, Servicepoint.class, Servicepoints.class,
+        query, offset, limit, okapiHeaders, vertxContext, GetServicePointsResponse.class, asyncResultHandler);
   }
 
+  @Validate
   @Override
   public void postServicePoints(String lang, Servicepoint entity,
           Map<String, String> okapiHeaders,
@@ -205,6 +159,7 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
     });
   }
 
+  @Validate
   @Override
   public void getServicePointsByServicepointId(String servicepointId,
           String lang, Map<String, String> okapiHeaders,
@@ -215,6 +170,7 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
         GetServicePointsByServicepointIdResponse.class, asyncResultHandler);
   }
 
+  @Validate
   @Override
   public void deleteServicePointsByServicepointId(String servicepointId,
           String lang, Map<String, String> okapiHeaders,
@@ -264,6 +220,7 @@ public class ServicePointAPI implements org.folio.rest.jaxrs.resource.ServicePoi
     });
   }
 
+  @Validate
   @Override
   public void putServicePointsByServicepointId(String servicepointId,
           String lang, Servicepoint entity, Map<String, String> okapiHeaders,

@@ -25,7 +25,9 @@ import static org.folio.rest.support.matchers.InventoryHierarchyResponseMatchers
 import static org.folio.rest.support.matchers.InventoryHierarchyResponseMatchers.isDeleted;
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.Assert.assertEquals;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -36,6 +38,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -43,10 +46,12 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import io.vertx.core.json.JsonArray;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.folio.HttpStatus;
 import org.folio.rest.jaxrs.model.InventoryInstanceIds;
 import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.support.Response;
@@ -56,7 +61,6 @@ import org.folio.rest.tools.utils.TenantTool;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
 import io.vertx.core.Handler;
 import io.vertx.core.json.DecodeException;
 import io.vertx.core.json.JsonObject;
@@ -96,24 +100,22 @@ public class InventoryHierarchyViewTest extends TestBaseWithInventoryUtil {
   }
 
   @Test
-  public void ServerErrorWrittenOutOnDatabaseError() throws InterruptedException, ExecutionException, TimeoutException {
+  public void serverErrorWrittenOutOnDatabaseError() throws Exception {
 
-    setFaultyStatisticalCode();    
+    withFaultyViewFunction(() -> {
+      params.put(QUERY_PARAM_NAME_SKIP_SUPPRESSED_FROM_DISCOVERY_RECORDS, "false");
 
-    params.put(QUERY_PARAM_NAME_SKIP_SUPPRESSED_FROM_DISCOVERY_RECORDS, "false");
+      List<JsonObject> instances = requestInventoryHierarchyViewUpdatedInstanceIds(params, response -> assertThat(response.getStatusCode(), is(200)));
+      UUID[] instanceIds = instances.stream()
+          .map(json -> UUID.fromString(json.getString("instanceId")))
+          .toArray(UUID[]::new);
 
-    List<JsonObject> instances = requestInventoryHierarchyViewUpdatedInstanceIds(params, response -> assertThat(response.getStatusCode(), is(200)));
-    UUID[] instanceIds = instances.stream()
-      .map(json -> UUID.fromString(json.getString("instanceId")))
-      .toArray(UUID[]::new);
-    
-    List<JsonObject> instancesData = requestInventoryHierarchyItemsAndHoldingsViewInstance(
-      instanceIds, false, response -> assertThat(response.getStatusCode(), is(500)));
-
-    JsonObject error = instancesData.get(0);
-    assertThat(error.getString("message"), is("invalid input syntax for type uuid: \"5t632 ytbg vnc\""));
-    removeFaultyStatisticalCode();
-
+      requestInventoryHierarchyItemsAndHoldingsViewInstance(instanceIds, false, response -> {
+        assertThat(response.getStatusCode(), is(HttpStatus.HTTP_INTERNAL_SERVER_ERROR.toInt()));
+        assertThat(response.getBody(), containsString("function get_items_and_holdings_view(unknown, unknown) does not exist"));
+      });
+      return null;
+    });
   }
 
   @Test
@@ -155,7 +157,7 @@ public class InventoryHierarchyViewTest extends TestBaseWithInventoryUtil {
   }
 
   @Test
-  public void holdingsEffectiveLocationIsTemporaryLocationWhenTempLocationSet() 
+  public void holdingsEffectiveLocationIsTemporaryLocationWhenTempLocationSet()
     throws InterruptedException, ExecutionException, TimeoutException {
 
     JsonObject record = holdingsClient.getById(holdingsRecordIdPredefined).getJson();
@@ -327,7 +329,7 @@ public class InventoryHierarchyViewTest extends TestBaseWithInventoryUtil {
   public void canGetFromInventoryHierarchyViewShowingSuppressedRecords() throws Exception {
     // given
     // one instance, 1 holding, 2 not suppressed items, 1 suppressed item
-    super.createItem(createItemRequest(thirdFloorLocationId, "item barcode 2", "item effective call number 3", bookMaterialTypeId)
+    super.createItem(createItemRequest(thirdFloorLocationId, "item barcode 3", "item effective call number 3", bookMaterialTypeId)
       .withDiscoverySuppress(true));
     // when
     params.put(QUERY_PARAM_NAME_SKIP_SUPPRESSED_FROM_DISCOVERY_RECORDS, "true");
@@ -382,6 +384,33 @@ public class InventoryHierarchyViewTest extends TestBaseWithInventoryUtil {
     getInventoryHierarchyInstances(params, response -> assertThat(response.getStatusCode(), is(400)));
   }
 
+  @Test
+  public void canGetHoldingWhenAllItemForItAreSuppressed() throws InterruptedException, ExecutionException, TimeoutException {
+    // given
+    // one instance, 1 holding with 2 not suppressed items, 1 holding with 1 suppressed item
+
+    UUID instanceId = UUID.fromString(predefinedInstance.getString("id"));
+    UUID holdingId = createHolding(instanceId, mainLibraryLocationId, null);
+    JsonObject item = new ItemRequestBuilder().forHolding(holdingId)
+      .withBarcode("21734")
+      .withTemporaryLocation(mainLibraryLocationId)
+      .withItemLevelCallNumber("item suppressed call number")
+      .withMaterialType(journalMaterialTypeId)
+      .withPermanentLoanType(canCirculateLoanTypeId)
+      .withDiscoverySuppress(true).create();
+    super.createItem(item);
+
+    // when
+    params.put(QUERY_PARAM_NAME_SKIP_SUPPRESSED_FROM_DISCOVERY_RECORDS, "true");
+    JsonObject instancesData = getInventoryHierarchyInstances(params).get(0);
+    JsonArray holdings  = (JsonArray)instancesData.getValue("holdings");
+    JsonArray items = (JsonArray)instancesData.getValue("items");
+
+    // then
+    assertEquals(2, holdings.getList().size());
+    assertEquals(2, items.getList().size());
+  }
+
   private void createItem(UUID mainLibraryLocationId, String s, String s2, UUID journalMaterialTypeId) {
     super.createItem(createItemRequest(mainLibraryLocationId, s, s2, journalMaterialTypeId).create());
   }
@@ -427,32 +456,29 @@ public class InventoryHierarchyViewTest extends TestBaseWithInventoryUtil {
     log.info("\nResponse from inventory instance ids view: " + response);
 
     final String body = response.getBody();
-    if (StringUtils.isNotEmpty(body)) {
+    if (StringUtils.isNotEmpty(body) && response.getStatusCode() != HttpStatus.HTTP_INTERNAL_SERVER_ERROR.toInt()) {
       results.add(new JsonObject(body));
     }
 
     return results;
   }
 
-  private void setFaultyStatisticalCode() {
-    String sql = "UPDATE item SET jsonb=jsonb_set(jsonb, '{statisticalCodeIds}', '[\"5t632 ytbg vnc\"]', true);";
-    
-    postgresClient.execute(sql, handler -> {
-      if (handler.failed()) {
-        log.error("Error updating database: " + handler.cause().getMessage());
-      }
-    });
-  }
+  /**
+   * Make the view function faulty, run the callable, then always restore the view function.
+   */
+  private void withFaultyViewFunction(Callable<Void> callable) throws Exception {
+    String sql = "ALTER FUNCTION " + TENANT_ID + "_mod_inventory_storage.get_items_and_holdings_view RENAME TO x";
+    PostgresClient.getInstance(getVertx()).execute(sql)
+    .toCompletionStage().toCompletableFuture().get(5, TimeUnit.SECONDS);
 
-  private void removeFaultyStatisticalCode() {
-    String sql = "UPDATE item SET jsonb=jsonb_set(jsonb, '{statisticalCodeIds}', '[]', true);";
-    
-    postgresClient.selectSingle(sql, handler -> {
-      if (handler.failed()) {
-        log.error("Error updating database: " + handler.cause().getMessage());
-      }
-    });
-
+    try {
+      callable.call();
+    }
+    finally {
+      sql = "ALTER FUNCTION " + TENANT_ID + "_mod_inventory_storage.x RENAME TO get_items_and_holdings_view";
+      PostgresClient.getInstance(getVertx()).execute(sql)
+      .toCompletionStage().toCompletableFuture().get(5, TimeUnit.SECONDS);
+    }
   }
 
   private List<JsonObject> requestInventoryHierarchyViewUpdatedInstanceIds(Map<String, String> queryParamsMap)

@@ -16,7 +16,7 @@ Provides PostgreSQL based storage to complement the [inventory module](http://gi
 - Java 11 JDK
 - Maven 3.3.9
 - Docker ([minimum requirements](https://www.testcontainers.org/supported_docker_environment/))
-- Postgres 9.6.1 (running and listening on localhost:5432, logged in user must have admin rights)
+- Postgres 12 (running and listening on localhost:5432, logged in user must have admin rights)
 - Kafka 2.6 (running and listening on localhost:9092)
 - Node 6.4.0 (for API linting and documentation generation)
 - NPM 3.10.3 (for API linting and documentation generation)
@@ -93,6 +93,11 @@ Navigate to the folder `infrastructure/local` directory within the clone of the 
 
 Execute `docker compose down` to stop the infrastructure containers
 
+# Local Deployment using Homebrew on macOS
+
+The GitHub Actions file [.github/workflows/mac.yml](.github/workflows/mac.yml) for macOS uses Homebrew
+to setup the infrastructure, run the module, and install and check sample data.
+
 # Running
 
 ## Preparation
@@ -113,7 +118,7 @@ To deactivate and unregister the module, run `./stop-managed-demo.sh` from the r
 
 ## Tenant Initialization
 
-The module supports v1.2 of the Okapi `_tenant` interface. This version of the interface allows Okapi to pass tenant initialization parameters using the `tenantParameters` key. Currently, the only parameters supported are the `loadReference` and `loadSample` keys, which will cause the module to load reference data and sample data respectively for the tenant if set to `true`.  Here is an example of passing the `loadReference` parameter to the module via Okapi's `/_/proxy/tenants/<tenantId>/install` endpoint:
+The module supports v2.0 of the Okapi `_tenant` interface. This version of the interface allows Okapi to pass tenant initialization parameters using the `tenantParameters` key. Currently, the only parameters supported are the `loadReference` and `loadSample` keys, which will cause the module to load reference data and sample data respectively for the tenant if set to `true`.  Here is an example of passing the `loadReference` parameter to the module via Okapi's `/_/proxy/tenants/<tenantId>/install` endpoint:
 
     curl -w '\n' -X POST -d '[ { "id": "mod-inventory-storage-14.1.0", "action": "enable" } ]' http://localhost:9130/_/proxy/tenants/my-test-tenant/install?tenantParameters=loadReference%3Dtrue
 
@@ -318,6 +323,51 @@ x-okapi-url: <okapi-url>
 
 {
   "type": "REINDEX",
+  "tenant": "<the-tenant-name>"
+}
+```
+
+## Iteration of instances
+
+There are business cases when the whole instance collection should be traversed to obtain existing instances 
+(and potentially related items/holdings) and processing them in asynchronous manner. Examples of such cases are:
+* creating search indices;
+* contributing instance catalog to external system.
+
+To support the above there is _"Instance Iteration API"_ available via `/instance-storage/instances/iteration` URL.
+It is similar to `instance-reindex` API but avoids some limitations of this API by:
+* allowing to specify a target Kafka topic for produced events;
+* allowing simultaneous execution of several jobs with different event types to serve the needs of 
+different business processes;
+* making the interface client agnostic (naming says nothing about business intention of the caller, like re-indexing).
+
+It's expected that Instance Iteration API will substitute Instance Reindex API in the future.
+
+Iteration API provides the following methods:
+* to start a new iteration job: `POST /instance-storage/instances/iteration`
+* to get status of a running job by its id: `GET /instance-storage/instances/iteration/{jobId}`
+* to cancel a job: `DELETE /instance-storage/instances/iteration/{jobId}`
+
+When an iteration job is being submitted the client can specify target topic and event type (optional): 
+```javascript
+{
+  "eventType": "<event-type>",
+  "topicName": "<target-topic-name>"
+}
+```
+If event type is missing in the request it will be defaulted to `ITERATE`.
+
+Once iteration job has been started, it initiates streaming of all instance IDs and publishing domain events for them. 
+The domain event has the following structure:
+* Topic: <target-topic-name>
+* Partition key: `The instance id`
+* Payload:
+```javascript
+x-okapi-tenant: <tenant-id>
+x-okapi-url: <okapi-url>
+iteration-job-id: <job-id>
+{
+  "type": "<event-type>",
   "tenant": "<the-tenant-name>"
 }
 ```

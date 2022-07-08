@@ -14,14 +14,13 @@ import static org.folio.rest.support.HttpResponseMatchers.statusCodeIs;
 import static org.folio.rest.support.JsonArrayHelper.toList;
 import static org.folio.rest.support.JsonObjectMatchers.hasSoleMessageContaining;
 import static org.folio.rest.support.JsonObjectMatchers.validationErrorMatches;
+import static org.folio.rest.support.ResponseHandler.empty;
 import static org.folio.rest.support.ResponseHandler.json;
 import static org.folio.rest.support.ResponseHandler.text;
 import static org.folio.rest.support.http.InterfaceUrls.holdingsStorageUrl;
 import static org.folio.rest.support.http.InterfaceUrls.instancesStorageUrl;
 import static org.folio.rest.support.http.InterfaceUrls.itemsStorageSyncUrl;
 import static org.folio.rest.support.http.InterfaceUrls.itemsStorageUrl;
-import static org.folio.rest.support.matchers.DateTimeMatchers.withinSecondsBeforeNow;
-import static org.folio.rest.support.matchers.DateTimeMatchers.withinSecondsBeforeNowAsString;
 import static org.folio.rest.support.matchers.DomainEventAssertions.assertCreateEventForItem;
 import static org.folio.rest.support.matchers.DomainEventAssertions.assertRemoveAllEventForItem;
 import static org.folio.rest.support.matchers.DomainEventAssertions.assertRemoveEventForItem;
@@ -39,12 +38,11 @@ import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.both;
+import static org.hamcrest.Matchers.arrayContainingInAnyOrder;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.collection.IsIterableContainingInAnyOrder.containsInAnyOrder;
 import static org.hamcrest.core.IsNull.notNullValue;
-import static org.hamcrest.text.MatchesPattern.matchesPattern;
-import static org.joda.time.Seconds.seconds;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -53,6 +51,8 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 
@@ -80,8 +80,9 @@ import org.folio.rest.support.JsonErrorResponse;
 import org.folio.rest.support.Response;
 import org.folio.rest.support.ResponseHandler;
 import org.folio.rest.support.builders.ItemRequestBuilder;
+import org.folio.rest.support.builders.StatisticalCodeBuilder;
+import org.folio.rest.support.db.OptimisticLocking;
 import org.folio.rest.support.matchers.DomainEventAssertions;
-import org.folio.services.CallNumberUtils;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.junit.After;
@@ -94,6 +95,7 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
+import lombok.SneakyThrows;
 
 @RunWith(JUnitParamsRunner.class)
 public class ItemStorageTest extends TestBaseWithInventoryUtil {
@@ -118,6 +120,12 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
   @After
   public void checkIdsAfterEach() {
     StorageTestSuite.checkForMismatchedIDs("item");
+  }
+
+  @After
+  public void removeStatisticalCodes() {
+    StorageTestSuite.deleteAll(itemsStorageUrl(""));
+    statisticalCodeFixture.removeTestStatisticalCodes();
   }
 
   @Parameters({
@@ -210,9 +218,18 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     UUID id = UUID.randomUUID();
     final String inTransitServicePointId = UUID.randomUUID().toString();
+    String adminNote = "an admin note";
+
+    final var statisticalCode = statisticalCodeFixture
+      .createSerialManagementCode(new StatisticalCodeBuilder()
+        .withCode("stcone")
+        .withName("Statistical code 1"));
+    final UUID statisticalCodeId = UUID.fromString(
+      statisticalCode.getJson().getString("id")
+    );
 
     JsonObject itemToCreate = new JsonObject();
-
+    itemToCreate.put("administrativeNotes", new JsonArray().add(adminNote));
     itemToCreate.put("id", id.toString());
     itemToCreate.put("holdingsRecordId", holdingsRecordId.toString());
     itemToCreate.put("barcode", "565578437802");
@@ -227,6 +244,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     itemToCreate.put("itemLevelCallNumberSuffix", "allOwnComponentsCNS");
     itemToCreate.put("itemLevelCallNumberPrefix", "allOwnComponentsCNP");
     itemToCreate.put("itemLevelCallNumberTypeId", ITEM_LEVEL_CALL_NUMBER_TYPE);
+
+    itemToCreate.put("statisticalCodeIds", Arrays.asList(statisticalCodeId));
 
 
     //TODO: Replace with real service point when validated
@@ -246,6 +265,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     JsonObject itemFromPost = postResponse.getJson();
 
     assertThat(itemFromPost.getString("id"), is(id.toString()));
+    assertThat(itemFromPost.getJsonArray("administrativeNotes").contains(adminNote), is(true));
     assertThat(itemFromPost.getString("holdingsRecordId"), is(holdingsRecordId.toString()));
     assertThat(itemFromPost.getString("barcode"), is("565578437802"));
     assertThat(itemFromPost.getJsonObject("status").getString("name"),
@@ -269,6 +289,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     JsonObject itemFromGet = getResponse.getJson();
 
     assertThat(itemFromGet.getString("id"), is(id.toString()));
+    assertThat(itemFromGet.getJsonArray("administrativeNotes").contains(adminNote), is(true));
     assertThat(itemFromGet.getString("holdingsRecordId"), is(holdingsRecordId.toString()));
     assertThat(itemFromGet.getString("barcode"), is("565578437802"));
     assertThat(itemFromGet.getJsonObject("status").getString("name"),
@@ -290,6 +311,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     assertThat(itemFromGet.getString("copyNumber"), is("copy1"));
     assertCreateEventForItem(itemFromGet);
     assertThat(itemFromGet.getString("effectiveShelvingOrder"), is("PS 43623 R534 P37 42005 COP Y1 allOwnComponentsCNS"));
+
+    assertThat(itemFromGet.getJsonArray("statisticalCodeIds"), hasItem(statisticalCodeId.toString()));
   }
 
   @Test
@@ -344,6 +367,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     final UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
     final UUID id = UUID.randomUUID();
     final String expectedCopyNumber = "copy1";
+    final String adminNote = "an admin note";
 
     JsonObject itemToCreate = smallAngryPlanet(id, holdingsRecordId);
     createItem(itemToCreate);
@@ -353,12 +377,27 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     JsonObject updatedItem = createdItem.copy()
       .put("copyNumber", expectedCopyNumber);
-
+    updatedItem.put("administrativeNotes", new JsonArray().add(adminNote));
     itemsClient.replace(id, updatedItem);
 
     JsonObject updatedItemResponse = itemsClient.getById(id).getJson();
     assertThat(updatedItemResponse.getString("copyNumber"), is(expectedCopyNumber));
     assertUpdateEventForItem(createdItem, getById(id).getJson());
+    assertThat(updatedItemResponse.getJsonArray("administrativeNotes").contains(adminNote), is(true));
+  }
+
+  @Test
+  public void optimisticLockingVersion() {
+    UUID itemId = UUID.randomUUID();
+    UUID holdingId = createInstanceAndHolding(mainLibraryLocationId);
+    JsonObject item = createItem(nod(itemId, holdingId));
+    item.put(PERMANENT_LOCATION_ID_KEY, annexLibraryLocationId);
+    // updating with current _version 1 succeeds and increments _version to 2
+    assertThat(update(item).getStatusCode(), is(204));
+    item.put(PERMANENT_LOCATION_ID_KEY, secondFloorLocationId);
+    // updating with outdated _version 1 fails, current _version is 2
+    int expected = OptimisticLocking.hasFailOnConflict("item") ? 409 : 204;
+    assertThat(update(item).getStatusCode(), is(expected));
   }
 
   @Test
@@ -739,6 +778,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     itemToCreate.put("hrid", "testHRID");
     createItem(itemToCreate);
 
+    itemToCreate = getById(itemId).getJson();
     itemToCreate.put("materialTypeId", UUID.randomUUID().toString());
 
     CompletableFuture<Response> completed = new CompletableFuture<>();
@@ -747,8 +787,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     Response response = completed.get(5, TimeUnit.SECONDS);
 
     assertThat(response.getStatusCode(), is(HttpURLConnection.HTTP_BAD_REQUEST));
-    assertThat(response.getBody(),
-        containsString("Cannot set item.materialtypeid"));
+    assertThat(response.getBody(), allOf(
+        containsString("Cannot set item"), containsString("materialtypeid")));
   }
 
   @Test
@@ -954,9 +994,9 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
       holdingRequestBuilder -> holdingRequestBuilder.withCallNumber("hrCallNumber"));
 
     return new JsonArray()
-        .add(nod(holdingsRecordId))
-        .add(smallAngryPlanet(holdingsRecordId))
-        .add(interestingTimes(UUID.randomUUID(), holdingsRecordId));
+        .add(nod(holdingsRecordId).put("barcode", UUID.randomUUID().toString()))
+        .add(smallAngryPlanet(holdingsRecordId).put("barcode", UUID.randomUUID().toString()))
+        .add(interestingTimes(holdingsRecordId).put("barcode", UUID.randomUUID().toString()));
   }
 
   private Response postSynchronousBatch(JsonArray itemsArray) {
@@ -1007,7 +1047,9 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     JsonArray itemsArray2 = threeItems();
     String existingId = itemsArray1.getJsonObject(1).getString("id");
     itemsArray2.getJsonObject(1).put("id", existingId);
+    // create the three item of itemsArray1
     assertThat(postSynchronousBatch(subPath, itemsArray1), statusCodeIs(HttpStatus.HTTP_CREATED));
+    // itemsArray2 has new items at position 0 and 2, but the same old item at position 1
     return postSynchronousBatch(subPath, itemsArray2);
   }
 
@@ -1029,12 +1071,12 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     final JsonArray itemsArray1 = new JsonArray()
       .add(nod(existingItemId, holdingsRecordId))
       .add(smallAngryPlanet(holdingsRecordId))
-      .add(interestingTimes(UUID.randomUUID(), holdingsRecordId));
+      .add(interestingTimes(holdingsRecordId));
 
     final JsonArray itemsArray2 = new JsonArray()
       .add(nod(existingItemId, holdingsRecordId))
-      .add(smallAngryPlanet(holdingsRecordId))
-      .add(interestingTimes(UUID.randomUUID(), holdingsRecordId));
+      .add(temeraire(holdingsRecordId))
+      .add(uprooted(holdingsRecordId));
 
     final var firstResponse = postSynchronousBatch("?upsert=true", itemsArray1);
     final var existingItemBeforeUpdate = getById(existingItemId).getJson();
@@ -1261,7 +1303,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     JsonObject itemToCreate = smallAngryPlanet(id, holdingsRecordId)
         .put("hrid", "testHRID");
 
-    createItem(itemToCreate);
+    Item initialItem = createItem(itemToCreate).mapTo(Item.class);
+    Instant initialStatusDate = initialItem.getStatus().getDate().toInstant();
 
     JsonObject replacement = itemToCreate.copy();
 
@@ -1282,12 +1325,13 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     assertThat(getResponse.getStatusCode(), is(HttpURLConnection.HTTP_OK));
 
     Item item = getResponse.getJson().mapTo(Item.class);
+    Instant finalStatusDate = item.getStatus().getDate().toInstant();
 
     assertThat(item.getId(), is(id.toString()));
 
     assertThat(item.getStatus().getName().value(), is("Checked out"));
 
-    assertThat(item.getStatus().getDate().toInstant(), withinSecondsBeforeNow(seconds(5)));
+    assertThat(finalStatusDate.isAfter(initialStatusDate), is(true));
   }
 
   @Test
@@ -1333,7 +1377,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     Instant changedStatusDate = item.getStatus().getDate().toInstant();
 
-    JsonObject secondReplacement = itemToCreate.copy();
+    JsonObject secondReplacement = getResponse.getJson().copy();
 
     secondReplacement
       .put("status", new JsonObject().put("name", "Available"));
@@ -1359,9 +1403,9 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
 
     Instant itemStatusDate = resultItem.getStatus().getDate().toInstant();
 
-    assertThat(itemStatusDate, withinSecondsBeforeNow(seconds(5)));
-
     assertThat(itemStatusDate, not(changedStatusDate));
+
+    assertThat(itemStatusDate.isAfter(changedStatusDate), is(true));
   }
 
   @Test
@@ -1369,7 +1413,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
     UUID id = UUID.randomUUID();
     JsonObject itemToCreate = smallAngryPlanet(id, holdingsRecordId);
-    createItem(itemToCreate);
+    JsonObject createdItem = createItem(itemToCreate);
+    String initalDateTime = createdItem.getJsonObject("status").getString("date");
 
     JsonObject itemWithUpdatedStatus = getById(id).getJson().copy()
       .put("status", new JsonObject().put("name", "Checked out"));
@@ -1380,7 +1425,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     JsonObject updatedStatus = updatedItemResponse.getJson().getJsonObject("status");
 
     assertThat(updatedStatus.getString("name"), is("Checked out"));
-    assertThat(updatedStatus.getString("date"), withinSecondsBeforeNowAsString(seconds(5)));
+    assertThat(isBefore(initalDateTime, updatedStatus.getString("date")), is(true));
 
     JsonObject itemWithUpdatedStatusDate = updatedItemResponse.getJson().copy();
     itemWithUpdatedStatusDate.getJsonObject("status")
@@ -1427,7 +1472,8 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
     UUID id = UUID.randomUUID();
     JsonObject itemToCreate = smallAngryPlanet(id, holdingsRecordId);
-    createItem(itemToCreate);
+    JsonObject createdItem = createItem(itemToCreate);
+    String initialStatusDate = createdItem.getJsonObject("status").getString("date");
 
     JsonObject itemWithUpdatedStatus = getById(id).getJson().copy()
       .put("status", new JsonObject().put("name", "Checked out"));
@@ -1438,7 +1484,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     JsonObject updatedStatus = updatedItemResponse.getJson().getJsonObject("status");
 
     assertThat(updatedStatus.getString("name"), is("Checked out"));
-    assertThat(updatedStatus.getString("date"), withinSecondsBeforeNowAsString(seconds(3)));
+    assertThat(isBefore(initialStatusDate, updatedStatus.getString("date")), is(true));
 
     JsonObject itemWithUpdatedCallNumber = updatedItemResponse.getJson().copy()
       .put("itemLevelCallNumber", "newItemLevelCallNumber");
@@ -1574,77 +1620,63 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
   }
 
   @Test
-  public void canSearchForItemsByBarcodeWithLeadingZero()
-    throws MalformedURLException,
-    InterruptedException,
-    ExecutionException,
-    TimeoutException {
-
+  public void canCreateMultipleItemsWithoutBarcode() throws Exception {
     UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
-
-    createItem(nod(holdingsRecordId));
-    createItem(uprooted(UUID.randomUUID(), holdingsRecordId));
-    createItem(smallAngryPlanet(holdingsRecordId).put("barcode", "036000291452"));
-    createItem(temeraire(UUID.randomUUID(), holdingsRecordId));
-    createItem(interestingTimes(UUID.randomUUID(), holdingsRecordId));
-
-    CompletableFuture<Response> searchCompleted = new CompletableFuture<>();
-
-    String url = itemsStorageUrl("") + "?query=barcode==036000291452";
-
-    client.get(url,
-      StorageTestSuite.TENANT_ID, ResponseHandler.json(searchCompleted));
-
-    Response searchResponse = searchCompleted.get(5, TimeUnit.SECONDS);
-
-    assertThat(searchResponse.getStatusCode(), is(200));
-
-    JsonObject searchBody = searchResponse.getJson();
-
-    JsonArray foundItems = searchBody.getJsonArray("items");
-
-    assertThat(foundItems.size(), is(1));
-    assertThat(searchBody.getInteger("totalRecords"), is(1));
-
-    assertThat(foundItems.getJsonObject(0).getString("barcode"),
-      is("036000291452"));
+    createItem(removeBarcode(nod(holdingsRecordId)));
+    createItem(removeBarcode(uprooted(holdingsRecordId)));
+    createItem(temeraire(holdingsRecordId).put("barcode", null));
+    createItem(interestingTimes(holdingsRecordId).put("barcode", null));
+    assertCqlFindsBarcodes("id==*", null, null, null, null);
   }
 
   @Test
-  public void canSearchForItemsByBarcode()
-    throws MalformedURLException,
-    InterruptedException,
-    ExecutionException,
-    TimeoutException {
-
+  public void cannotCreateItemWithDuplicateBarcode() throws Exception {
     UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
+    createItem(nod(holdingsRecordId).put("barcode", "9876a"));
+    assertThat(itemsClient.attemptToCreate(uprooted(holdingsRecordId).put("barcode", "9876a")),
+        hasValidationError("9876a"));
+    assertThat(itemsClient.attemptToCreate(uprooted(holdingsRecordId).put("barcode", "9876A")),
+        hasValidationError("9876a"));
+  }
 
+  @Test
+  public void cannotUpdateItemWithDuplicateBarcode() throws Exception {
+    UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
+    createItem(uprooted(holdingsRecordId).put("barcode", "9876a"));
+    UUID nodId = UUID.randomUUID();
+    JsonObject nod = createItem(nod(nodId, holdingsRecordId).put("barcode", "123"));
+
+    Response response = itemsClient.attemptToReplace(nodId, nod.put("barcode", "9876A"));
+    assertThat(response.getStatusCode(), is(400));
+    assertThat(response.getBody(), containsString("already exists in table item: 9876a"));
+  }
+
+  public void canSearchForItemsByBarcodeWithLeadingZero() throws Exception {
+    UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
     createItem(nod(holdingsRecordId));
-    createItem(uprooted(UUID.randomUUID(), holdingsRecordId));
+    createItem(uprooted(holdingsRecordId).put("barcode", "36000291452"));
+    createItem(temeraire(holdingsRecordId).put("barcode", "036000291452"));
+    createItem(smallAngryPlanet(holdingsRecordId));
+    createItem(interestingTimes(holdingsRecordId));
+    assertCqlFindsBarcodes("barcode==036000291452", "036000291452");
+    assertCqlFindsBarcodes("barcode==36000291452", "36000291452");
+  }
+
+  @Test
+  public void canSearchForItemsByBarcode() throws Exception {
+    UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
+    createItem(nod(holdingsRecordId).put("barcode", "123456a"));
+    createItem(uprooted(holdingsRecordId).put("barcode", "123456ä"));
     createItem(smallAngryPlanet(holdingsRecordId).put("barcode", "673274826203"));
-    createItem(temeraire(UUID.randomUUID(), holdingsRecordId));
-    createItem(interestingTimes(UUID.randomUUID(), holdingsRecordId));
-
-    CompletableFuture<Response> searchCompleted = new CompletableFuture<>();
-
-    String url = itemsStorageUrl("") + "?query=barcode==673274826203";
-
-    client.get(url,
-      StorageTestSuite.TENANT_ID, ResponseHandler.json(searchCompleted));
-
-    Response searchResponse = searchCompleted.get(5, TimeUnit.SECONDS);
-
-    assertThat(searchResponse.getStatusCode(), is(200));
-
-    JsonObject searchBody = searchResponse.getJson();
-
-    JsonArray foundItems = searchBody.getJsonArray("items");
-
-    assertThat(foundItems.size(), is(1));
-    assertThat(searchBody.getInteger("totalRecords"), is(1));
-
-    assertThat(foundItems.getJsonObject(0).getString("barcode"),
-      is("673274826203"));
+    createItem(temeraire(holdingsRecordId));
+    createItem(interestingTimes(holdingsRecordId));
+    assertCqlFindsBarcodes("barcode==673274826203", "673274826203");
+    // respect accents, ignore case
+    assertCqlFindsBarcodes("barcode==123456a", "123456a");
+    assertCqlFindsBarcodes("barcode==123456A", "123456a");
+    assertCqlFindsBarcodes("barcode==123456ä", "123456ä");
+    assertCqlFindsBarcodes("barcode==123456Ä", "123456ä");
+    assertCqlFindsBarcodes("barcode==123456*", "123456a", "123456ä");
   }
 
   @Test
@@ -2247,11 +2279,11 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     final UUID holdingsId = createInstanceAndHolding(mainLibraryLocationId);
 
     final IndividualResource suppressedItem = itemsClient.create(
-      smallAngryPlanet(holdingsId).put(DISCOVERY_SUPPRESS, true));
+      nod(holdingsId).put(DISCOVERY_SUPPRESS, true));
     final IndividualResource notSuppressedItem = itemsClient.create(
       smallAngryPlanet(holdingsId).put(DISCOVERY_SUPPRESS, false));
     final IndividualResource notSuppressedItemDefault = itemsClient.create(
-      smallAngryPlanet(holdingsId));
+      uprooted(holdingsId));
 
     final List<IndividualResource> suppressedItems = itemsClient
       .getMany("%s==true", DISCOVERY_SUPPRESS);
@@ -2357,7 +2389,7 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     final IndividualResource firstItem = itemsClient.create(
       smallAngryPlanet(holdingsId).put("purchaseOrderLineIdentifier", "poli-1"));
 
-    itemsClient.create(smallAngryPlanet(holdingsId)
+    itemsClient.create(nod(holdingsId)
       .put("purchaseOrderLineIdentifier", "poli-2"));
 
     final List<IndividualResource> poli1Items = itemsClient
@@ -2367,17 +2399,185 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     assertThat(poli1Items.get(0).getId(), is(firstItem.getId()));
   }
 
-  private Response getById(UUID id) throws InterruptedException,
-    ExecutionException, TimeoutException {
+  @Test
+  public void cannotCreateItemWithNonExistentStatisticalCodeId() throws Exception {
+    final UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
+    final UUID nonExistentStatisticalCodeId = UUID.randomUUID();
+    final String status = "Available";
 
-    URL getItemUrl = itemsStorageUrl(String.format("/%s", id));
+    final JsonObject itemToCreate = new ItemRequestBuilder()
+      .forHolding(holdingsRecordId)
+      .withMaterialType(journalMaterialTypeId)
+      .withPermanentLoanType(canCirculateLoanTypeId)
+      .withStatus(status)
+      .withStatisticalCodeIds(Arrays.asList(nonExistentStatisticalCodeId))
+      .create();
 
-    CompletableFuture<Response> getCompleted = new CompletableFuture<>();
+    final String itemId = itemToCreate.getString("id");
 
-    client.get(getItemUrl, StorageTestSuite.TENANT_ID,
-      ResponseHandler.json(getCompleted));
+    final Response createdItem = itemsClient.attemptToCreate(itemToCreate);
 
-    return getCompleted.get(5, TimeUnit.SECONDS);
+    String expectedMessage = String.format(
+      "statistical code doesn't exist: %s foreign key violation in statisticalCodeIds array of item with id=%s",
+      nonExistentStatisticalCodeId.toString(),
+      itemId
+    );
+
+    assertThat(createdItem, hasValidationError(
+      expectedMessage,
+      "item",
+      itemId
+    ));
+  }
+
+  @Test
+  public void canCreateItemWithMultipleStatisticalCodeIds() throws Exception {
+    final var firstStatisticalCode = statisticalCodeFixture
+      .createSerialManagementCode(new StatisticalCodeBuilder()
+        .withCode("stcone")
+        .withName("Statistical code 1"));
+
+    final var secondStatisticalCode = statisticalCodeFixture
+      .attemptCreateSerialManagementCode(new StatisticalCodeBuilder()
+        .withCode("stctwo")
+        .withName("Statistical code 2"));
+
+    final UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
+
+    final UUID firstStatisticalCodeId = UUID.fromString(
+      firstStatisticalCode.getJson().getString("id")
+    );
+    final UUID secondStatisticalCodeId = UUID.fromString(
+      secondStatisticalCode.getJson().getString("id")
+    );
+
+    final String status = "Available";
+
+    final JsonObject itemToCreate = new ItemRequestBuilder()
+      .forHolding(holdingsRecordId)
+      .withMaterialType(journalMaterialTypeId)
+      .withPermanentLoanType(canCirculateLoanTypeId)
+      .withStatus(status)
+      .withStatisticalCodeIds(Arrays.asList(
+        firstStatisticalCodeId,
+        secondStatisticalCodeId
+      ))
+      .create();
+
+    final Response createdItem = itemsClient.attemptToCreate(itemToCreate);
+
+    assertThat(createdItem.getStatusCode(), is(HttpURLConnection.HTTP_CREATED));
+  }
+
+  @Test
+  public void cannotCreateItemWithAtLeastOneNonExistentStatisticalCodeId() throws Exception {
+    final var statisticalCode = statisticalCodeFixture
+      .createSerialManagementCode(new StatisticalCodeBuilder()
+        .withCode("stcone")
+        .withName("Statistical code 1"));
+
+    final UUID nonExistentStatisticalCodeId = UUID.randomUUID();
+
+    final UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
+
+    final UUID statisticalCodeId = UUID.fromString(
+      statisticalCode.getJson().getString("id")
+    );
+
+    final String status = "Available";
+
+    final JsonObject itemToCreate = new ItemRequestBuilder()
+      .forHolding(holdingsRecordId)
+      .withMaterialType(journalMaterialTypeId)
+      .withPermanentLoanType(canCirculateLoanTypeId)
+      .withStatus(status)
+      .withStatisticalCodeIds(Arrays.asList(
+        statisticalCodeId,
+        nonExistentStatisticalCodeId
+      ))
+      .create();
+
+    final String itemId = itemToCreate.getString("id");
+
+    final Response createdItem = itemsClient.attemptToCreate(itemToCreate);
+
+    String expectedMessage = String.format(
+      "statistical code doesn't exist: %s foreign key violation in statisticalCodeIds array of item with id=%s",
+      nonExistentStatisticalCodeId.toString(),
+      itemId
+    );
+
+    assertThat(createdItem, hasValidationError(
+      expectedMessage,
+      "item",
+      itemId
+    ));
+  }
+
+  @Test
+  public void canUpdateItemWithStatisticalCodeId() throws Exception {
+    final var statisticalCode = statisticalCodeFixture
+      .createSerialManagementCode(new StatisticalCodeBuilder()
+        .withCode("stcone")
+        .withName("Statistical code 1"));
+
+    final UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
+
+    final UUID statisticalCodeId = UUID.fromString(
+      statisticalCode.getJson().getString("id")
+    );
+
+    JsonObject item = new JsonObject();
+    String itemId = UUID.randomUUID().toString();
+    item.put("id", itemId);
+    item.put("status", new JsonObject().put("name", "Available"));
+    item.put("holdingsRecordId", holdingsRecordId.toString());
+    item.put("permanentLoanTypeId", canCirculateLoanTypeID);
+    item.put("materialTypeId", bookMaterialTypeID);
+    item.put("hrid", "testHRID");
+    createItem(item);
+
+    item = getById(itemId).getJson();
+
+    item.put("statisticalCodeIds", Arrays.asList(statisticalCodeId));
+
+    CompletableFuture<Response> completed = new CompletableFuture<>();
+    client.put(itemsStorageUrl("/" + itemId), item, StorageTestSuite.TENANT_ID,
+        ResponseHandler.empty(completed));
+    Response response = completed.get(5, TimeUnit.SECONDS);
+
+    assertThat(response.getStatusCode(), is(HttpURLConnection.HTTP_NO_CONTENT));
+  }
+
+  @Test
+  public void cannotUpdateItemWithNonExistentStatisticalCodeId() throws Exception {
+    UUID nonExistentStatisticalCodeId = UUID.randomUUID();
+    UUID holdingsRecordId = createInstanceAndHolding(mainLibraryLocationId);
+    JsonObject item = new JsonObject();
+    String itemId = UUID.randomUUID().toString();
+    item.put("id", itemId);
+    item.put("status", new JsonObject().put("name", "Available"));
+    item.put("holdingsRecordId", holdingsRecordId.toString());
+    item.put("permanentLoanTypeId", canCirculateLoanTypeID);
+    item.put("materialTypeId", bookMaterialTypeID);
+    item.put("hrid", "testHRID");
+    createItem(item);
+
+    item = getById(itemId).getJson();
+
+    item.put("statisticalCodeIds", Arrays.asList(nonExistentStatisticalCodeId.toString()));
+
+    CompletableFuture<Response> completed = new CompletableFuture<>();
+    client.put(itemsStorageUrl("/" + itemId), item, StorageTestSuite.TENANT_ID,
+        ResponseHandler.text(completed));
+    Response response = completed.get(5, TimeUnit.SECONDS);
+
+    assertThat(response.getStatusCode(), is(HttpURLConnection.HTTP_BAD_REQUEST));
+    assertThat(response.getBody(), allOf(
+        containsString("statistical code doesn't exist:"),
+        containsString(nonExistentStatisticalCodeId.toString()),
+        containsString("foreign key violation in statisticalCodeIds array of item"),
+        containsString(itemId)));
   }
 
   private static JsonObject createItemRequest(
@@ -2427,16 +2627,37 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     return nod(UUID.randomUUID(), holdingsRecordId);
   }
 
+  static JsonObject nodWithNoBarcode(UUID holdingsRecordId) {
+    return removeBarcode(nod(holdingsRecordId));
+  }
+
   private static JsonObject uprooted(UUID itemId, UUID holdingsRecordId) {
     return createItemRequest(itemId, holdingsRecordId, "657670342075");
+  }
+
+  private static JsonObject uprooted(UUID holdingsRecordId) {
+    return uprooted(UUID.randomUUID(), holdingsRecordId);
   }
 
   private static JsonObject temeraire(UUID itemId, UUID holdingsRecordId) {
     return createItemRequest(itemId, holdingsRecordId, "232142443432");
   }
 
+  private static JsonObject temeraire(UUID holdingsRecordId) {
+    return temeraire(UUID.randomUUID(), holdingsRecordId);
+  }
+
   private static JsonObject interestingTimes(UUID itemId, UUID holdingsRecordId) {
     return createItemRequest(itemId, holdingsRecordId, "56454543534");
+  }
+
+  private static JsonObject interestingTimes(UUID holdingsRecordId) {
+    return interestingTimes(UUID.randomUUID(), holdingsRecordId);
+  }
+
+  static JsonObject removeBarcode(JsonObject item) {
+    item.remove("barcode");
+    return item;
   }
 
   private Items findItems(String searchQuery) throws Exception {
@@ -2445,8 +2666,11 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     client.get(itemsStorageUrl("?query=") + urlEncode(searchQuery),
       StorageTestSuite.TENANT_ID, ResponseHandler.json(searchCompleted));
 
-    return searchCompleted.get(5, TimeUnit.SECONDS).getJson()
-      .mapTo(Items.class);
+    Response response = searchCompleted.get(5, TimeUnit.SECONDS);
+
+    assertThat(response.getStatusCode(), is(200));
+
+    return response.getJson().mapTo(Items.class);
   }
 
   private Response getById(String id) {
@@ -2454,6 +2678,20 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     client.get(itemsStorageUrl("/" + id), TENANT_ID, json(getCompleted));
     try {
       return getCompleted.get(5, SECONDS);
+    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private Response getById(UUID id) {
+    return getById(id.toString());
+  }
+
+  private Response update(JsonObject item) {
+    CompletableFuture<Response> completed = new CompletableFuture<>();
+    client.put(itemsStorageUrl("/" + item.getString("id")), item, TENANT_ID, empty(completed));
+    try {
+      return completed.get(5, SECONDS);
     } catch (InterruptedException | ExecutionException | TimeoutException e) {
       throw new RuntimeException(e);
     }
@@ -2474,6 +2712,16 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
   private void assertHRIDRange(Response response, String minHRID, String maxHRID) {
     assertThat(response.getJson().getString("hrid"),
         is(both(greaterThanOrEqualTo(minHRID)).and(lessThanOrEqualTo(maxHRID))));
+  }
+
+  /**
+   * Assert that the cql query returns items with the expected barcodes in any order.
+   */
+  private void assertCqlFindsBarcodes(String cql, String ... expectedBarcodes) throws Exception {
+    Items items = findItems(cql);
+    String [] barcodes = items.getItems().stream().map(Item::getBarcode).toArray(String []::new);
+    assertThat(cql, barcodes, arrayContainingInAnyOrder(expectedBarcodes));
+    assertThat(cql, items.getTotalRecords(), is(barcodes.length));
   }
 
   private JsonObject addTags(String tagValue, UUID holdingsRecordId) {
@@ -2510,6 +2758,14 @@ public class ItemStorageTest extends TestBaseWithInventoryUtil {
     return item.getJsonObject("tags").getJsonArray("tagList").stream()
       .map(Object::toString)
       .collect(Collectors.toList());
+  }
+
+  @SneakyThrows
+  private Boolean isBefore(String dateTime, String secondDateTime) {
+    ZonedDateTime firstTime = ZonedDateTime.parse(dateTime);
+    ZonedDateTime secondTime = ZonedDateTime.parse(secondDateTime);
+
+    return secondTime.isAfter(firstTime);
   }
 
   private List<UUID> searchByCallNumberEyeReadable(String searchTerm)

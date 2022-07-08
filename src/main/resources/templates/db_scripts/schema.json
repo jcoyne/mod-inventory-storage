@@ -1,6 +1,13 @@
 {
   "tables": [
     {
+      "tableName": "authority",
+      "fromModuleVersion": "22.1.0",
+      "withMetadata": true,
+      "withAuditing": false,
+      "withOptimisticLocking": "failOnConflict"
+    },
+    {
       "tableName": "loan_type",
       "withMetadata": true,
       "withAuditing": false,
@@ -336,7 +343,7 @@
       "fromModuleVersion": "19.2.0",
       "withMetadata": true,
       "withAuditing": true,
-      "withOptimisticLocking": "logOnConflict",
+      "withOptimisticLocking": "failOnConflict",
       "auditingTableName": "audit_instance",
       "auditingFieldName": "record",
       "customSnippetPath": "audit-delete-trigger.sql",
@@ -369,32 +376,8 @@
       ],
       "ginIndex": [
         {
-          "fieldName": "title",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
-          "fieldName": "indexTitle",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
-          "fieldName": "contributors",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
           "fieldName": "identifiers",
           "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
-          "fieldName": "subjects",
-          "tOps": "DELETE",
           "caseSensitive": false,
           "removeAccents": true
         }
@@ -457,34 +440,6 @@
       ],
       "fullTextIndex": [
         {
-          "fieldName": "classifications",
-          "arraySubfield" : "classificationNumber",
-          "arrayModifiers": ["classificationTypeId"]
-        },
-        {
-          "fieldName": "keyword",
-          "multiFieldNames": "title,indexTitle,alternativeTitles[*].alternativeTitle,series,contributors[*].name,identifiers[*].value"
-        },
-        {
-          "fieldName": "allTitles",
-          "multiFieldNames": "title,indexTitle,alternativeTitles[*].alternativeTitle,series"
-        },
-        {
-          "fieldName": "contributorsNames",
-          "multiFieldNames": "contributors[*].name"
-        },
-        {
-          "fieldName": "title"
-        },
-        {
-          "fieldName": "languages"
-        },
-        {
-          "fieldName": "contributors",
-          "arraySubfield" : "name",
-          "arrayModifiers": ["contributorNameTypeId"]
-        },
-        {
           "fieldName": "identifiers",
           "arraySubfield" : "value",
           "arrayModifiers": ["identifierTypeId"]
@@ -498,16 +453,6 @@
           "fieldName": "isbn",
           "sqlExpression" : "normalize_isbns(jsonb->'identifiers')",
           "sqlExpressionQuery": "normalize_digits($)"
-        },
-        {
-          "fieldName": "dateOfPublication",
-          "sqlExpression" : "concat_array_object_values(jsonb->'publication', 'dateOfPublication')"
-        },
-        {
-          "fieldName": "subjects",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
         }
       ]
     },
@@ -561,6 +506,17 @@
     },
     {
       "tableName": "holdings_type",
+      "withMetadata": true,
+      "withAuditing": false,
+      "uniqueIndex": [
+        {
+          "fieldName": "name",
+          "tOps": "ADD"
+        }
+      ]
+    },
+    {
+      "tableName": "authority_note_type",
       "withMetadata": true,
       "withAuditing": false,
       "uniqueIndex": [
@@ -630,7 +586,7 @@
       "fromModuleVersion": "19.2.0",
       "withMetadata": true,
       "withAuditing": true,
-      "withOptimisticLocking": "logOnConflict",
+      "withOptimisticLocking": "failOnConflict",
       "auditingTableName": "audit_holdings_record",
       "auditingFieldName": "record",
       "customSnippetPath": "audit-delete-trigger.sql",
@@ -684,12 +640,6 @@
         }
       ],
       "ginIndex": [
-        {
-          "fieldName": "electronicAccess",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        }
       ],
       "index": [
         {
@@ -720,16 +670,6 @@
         }
       ],
       "fullTextIndex": [
-        {
-          "fieldName": "callNumberAndSuffixNormalized",
-          "sqlExpression" : "normalize_holdings_call_number_and_suffix(jsonb)",
-          "sqlExpressionQuery": "normalize_call_number_string($) || '*'"
-        },
-        {
-          "fieldName": "fullCallNumberNormalized",
-          "sqlExpression" : "normalize_holdings_full_call_number(jsonb)",
-          "sqlExpressionQuery": "normalize_call_number_string($) || '*'"
-        }
       ]
     },
     {
@@ -737,7 +677,7 @@
       "withMetadata": true,
       "fromModuleVersion": "19.2.0",
       "withAuditing": true,
-      "withOptimisticLocking": "logOnConflict",
+      "withOptimisticLocking": "failOnConflict",
       "auditingTableName": "audit_item",
       "auditingFieldName": "record",
       "customSnippetPath": "audit-delete-trigger.sql",
@@ -789,6 +729,12 @@
       ],
       "uniqueIndex": [
         {
+          "fieldName": "barcode",
+          "tOps": "ADD",
+          "caseSensitive": false,
+          "removeAccents": false
+        },
+        {
           "fieldName": "hrid",
           "tOps": "ADD"
         }
@@ -799,12 +745,6 @@
           "tOps": "ADD",
           "caseSensitive": false,
           "removeAccents": false
-        },
-        {
-          "fieldName": "barcode",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
         },
         {
           "fieldName": "status.name",
@@ -846,34 +786,8 @@
         }
       ],
       "ginIndex": [
-        {
-          "fieldName": "barcode",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        },
-        {
-          "fieldName": "status.name",
-          "tOps": "ADD",
-          "caseSensitive": false,
-          "removeAccents": true
-        }
       ],
       "fullTextIndex": [
-        {
-          "fieldName": "barcode",
-          "tOps": "ADD"
-        },
-        {
-          "fieldName": "callNumberAndSuffixNormalized",
-          "sqlExpression" : "normalize_item_call_number_and_suffix(jsonb)",
-          "sqlExpressionQuery": "normalize_call_number_string($) || '*'"
-        },
-        {
-          "fieldName": "fullCallNumberNormalized",
-          "sqlExpression" : "normalize_item_full_call_number(jsonb)",
-          "sqlExpressionQuery": "normalize_call_number_string($) || '*'"
-        }
       ]
     },
     {
@@ -930,6 +844,16 @@
       "tableName": "notification_sending_error",
       "withMetadata": false,
       "withAuditing": false
+    },
+    {
+      "tableName": "iteration_job",
+      "withMetadata": false,
+      "withAuditing": false
+    },
+    {
+      "tableName": "async_migration_job",
+      "withMetadata": false,
+      "withAuditing": false
     }
   ],
   "scripts": [
@@ -946,11 +870,6 @@
     {
       "run": "before",
       "snippetPath": "createIsbnFunctions.sql",
-      "fromModuleVersion": "19.2.0"
-    },
-    {
-      "run": "before",
-      "snippetPath": "createCallNumberNormalizationFunctions.sql",
       "fromModuleVersion": "19.2.0"
     },
     {
@@ -1055,15 +974,20 @@
     },
     {
       "run": "after",
+      "snippetPath": "publication-period/publication-period-functions.sql",
+      "fromModuleVersion": "23.0.0"
+    },
+    {
+      "run": "after",
       "snippetPath": "instance-hr-item/instance-hr-item-view.sql",
-      "fromModuleVersion": "19.5.0"
+      "fromModuleVersion": "23.0.0"
     },
     {
       "run": "after",
       "snippetPath": "inventory-hierarchy/addEffectiveHoldingsToItemsAndHoldingsView.sql",
-      "fromModuleVersion": "20.2.0"
-	},
-	{
+      "fromModuleVersion": "20.3.0"
+    },
+    {
       "run": "after",
       "snippetPath": "addInstanceFormatsAudioBelt.sql",
       "fromModuleVersion": "20.3.0"
@@ -1072,6 +996,46 @@
       "run": "after",
       "snippetPath": "dropLegacyItemEffectiveLocationFunctions.sql",
       "fromModuleVersion": "21.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "addIdentifierTypesUpcIsmn.sql",
+      "fromModuleVersion": "21.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "inventory-hierarchy/addHoldingsIfItemsSuppressedItemsAndHoldingsView.sql",
+      "fromModuleVersion": "22.0.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "itemStatisticalCodeReferenceCheckTrigger.sql",
+      "fromModuleVersion": "22.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "statisticalCodeTypesReferenceCheckTrigger.sql",
+      "fromModuleVersion": "23.0.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "statisticalCodeIdReferenceCheckTrigger.sql",
+      "fromModuleVersion": "23.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "changeUUIDCastInGetStatisticalCodesFunction.sql",
+      "fromModuleVersion": "23.1.0"
+    },
+    {
+      "run": "after",
+      "snippetPath": "inventory-hierarchy/correctGetUpdatedInstanceIdsView.sql",
+      "fromModuleVersion": "23.1.0"
+    },
+    {
+        "run":"after",
+        "snippetPath":"dropCallNumberNormalizationFunctions.sql",
+        "fromModuleVersion":"24.0.0"
     }
   ]
 }
