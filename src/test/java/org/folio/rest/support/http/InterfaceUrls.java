@@ -62,6 +62,10 @@ public class InterfaceUrls {
     return StorageTestSuite.storageUrl("/instance-storage/batch/synchronous" + subPath);
   }
 
+  public static URL instanceSetUrl(String subPath) {
+    return StorageTestSuite.storageUrl("/inventory-view/instance-set" + subPath);
+  }
+
   public static URL instanceRelationshipsUrl(String subPath) {
     return StorageTestSuite.storageUrl("/instance-storage/instance-relationships" + subPath);
   }

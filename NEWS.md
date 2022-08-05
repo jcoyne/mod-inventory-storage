@@ -1,3 +1,6 @@
+* GET Instance Set by CQL ([MODINVSTOR-918](https://issues.folio.org/browse/MODINVSTOR-918))
+* provides `inventory-view-instance-set 1.0`
+
 ## 23.0.5 2022-06-06
 * Update fromModuleVersion value (MODINVSTOR-913)
 
