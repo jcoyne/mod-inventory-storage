@@ -12,6 +12,7 @@ import static org.folio.rest.persist.PgUtil.deleteById;
 import static org.folio.rest.persist.PgUtil.post;
 import static org.folio.rest.persist.PgUtil.postSync;
 import static org.folio.rest.persist.PgUtil.postgresClient;
+import static org.folio.rest.persist.PgUtil.Response;
 import static org.folio.services.batch.BatchOperationContextFactory.buildBatchOperationContext;
 import static org.folio.validator.HridValidators.refuseWhenHridChanged;
 
@@ -20,16 +21,26 @@ import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
+
+import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
 import javax.ws.rs.core.Response;
 import org.apache.logging.log4j.Logger;
 import org.folio.persist.HoldingsRepository;
+import org.folio.persist.ItemRepository;
 import org.folio.rest.jaxrs.model.HoldingsRecord;
 import org.folio.rest.jaxrs.model.Item;
+import org.folio.rest.jaxrs.resource.support.ResponseDelegate;
 import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.persist.SQLConnection;
 import org.folio.rest.support.HridManager;
+import org.folio.rest.tools.utils.MetadataUtil;
+import org.folio.services.batch.BatchOperationContext;
 import org.folio.services.domainevent.HoldingDomainEventPublisher;
 import org.folio.services.domainevent.ItemDomainEventPublisher;
 import org.folio.services.item.ItemService;
@@ -46,6 +57,7 @@ public class HoldingsService {
   private final HoldingsRepository holdingsRepository;
   private final ItemDomainEventPublisher itemEventService;
   private final HoldingDomainEventPublisher domainEventPublisher;
+  private final ItemRepository itemRepository;
 
   public HoldingsService(Context context, Map<String, String> okapiHeaders) {
     this.vertxContext = context;
@@ -57,6 +69,7 @@ public class HoldingsService {
     holdingsRepository = new HoldingsRepository(context, okapiHeaders);
     itemEventService = new ItemDomainEventPublisher(context, okapiHeaders);
     domainEventPublisher = new HoldingDomainEventPublisher(context, okapiHeaders);
+    itemRepository = new ItemRepository(context, okapiHeaders);
   }
 
   public Future<Void> deleteAllHoldings() {
@@ -133,14 +146,29 @@ public class HoldingsService {
         holdingsRepository, HoldingsRecord::getId))
       .compose(batchOperation -> {
         final Promise<Response> postSyncResult = promise();
+        if (upsert) {
+          postgresClient.withTrans(conn -> conn.upsertBatch(HOLDINGS_RECORD_TABLE, holdings));
+        } else {
+          postSync(HOLDINGS_RECORD_TABLE, holdings, MAX_ENTITIES, upsert,
+            okapiHeaders, vertxContext, PostHoldingsStorageBatchSynchronousResponse.class,
+            postSyncResult);
 
-        postSync(HOLDINGS_RECORD_TABLE, holdings, MAX_ENTITIES, upsert,
-          okapiHeaders, vertxContext, PostHoldingsStorageBatchSynchronousResponse.class,
-          postSyncResult);
-
-        return postSyncResult.future()
-          .onSuccess(domainEventPublisher.publishCreatedOrUpdated(batchOperation));
+          return postSyncResult.future()
+            .onSuccess(domainEventPublisher.publishCreatedOrUpdated(batchOperation));
+        }
       });
+  }
+
+  //somehow need this function to update the item records attached to each holdings record, then give me a
+  //list of item records modified that I can pass off to the publishing function.
+
+  private Future<List<Item>> updateItemRecords(AsyncResult<SQLConnection> conn, List<HoldingsRecord> holdings) {
+    List<Future<List<Item>>> futures = holdings
+      .stream().map(holding -> itemService.updateItemsOnHoldingChanged(conn, holding))
+      .collect(Collectors.toList());
+    return CompletableFuture
+      .allOf(futures.toArray(new CompletableFuture[futures.size()]))
+      .thenApply(notUsed -> futures.stream().map(CompletableFuture::join).collect(Collectors.toList()));
   }
 
   private String calculateEffectiveLocation(HoldingsRecord record) {
