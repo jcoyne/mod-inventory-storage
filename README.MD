@@ -1,6 +1,6 @@
 # mod-inventory-storage
 
-Copyright (C) 2016-2021 The Open Library Foundation
+Copyright (C) 2016-2022 The Open Library Foundation
 
 This software is distributed under the terms of the Apache License,
 Version 2.0. See the file "[LICENSE](LICENSE)" for more information.
@@ -261,6 +261,16 @@ Changing the start number to a number lower than the current number is not suppo
 likely lead to generation of duplicate HRIDs. If an inventory type is added that contains a
 duplicate HRID, the module will reject the submission.
 
+# /inventory-view/instances
+
+Running a query against the `/inventory-view/instances` API writes this log message:
+
+```
+WARN  CQL2PgJSON           loadDbSchema loadDbSchema(): No configuration for table instance_holdings_item_view found, using defaults
+```
+
+This is a [known issue caused by RMB](https://issues.folio.org/browse/RMB-909) and can be ignored.
+
 # Domain event pattern
 
 The pattern means that every time when an instance/item is created/updated/removed
@@ -329,7 +339,7 @@ x-okapi-url: <okapi-url>
 
 ## Iteration of instances
 
-There are business cases when the whole instance collection should be traversed to obtain existing instances 
+There are business cases when the whole instance collection should be traversed to obtain existing instances
 (and potentially related items/holdings) and processing them in asynchronous manner. Examples of such cases are:
 * creating search indices;
 * contributing instance catalog to external system.
@@ -337,7 +347,7 @@ There are business cases when the whole instance collection should be traversed 
 To support the above there is _"Instance Iteration API"_ available via `/instance-storage/instances/iteration` URL.
 It is similar to `instance-reindex` API but avoids some limitations of this API by:
 * allowing to specify a target Kafka topic for produced events;
-* allowing simultaneous execution of several jobs with different event types to serve the needs of 
+* allowing simultaneous execution of several jobs with different event types to serve the needs of
 different business processes;
 * making the interface client agnostic (naming says nothing about business intention of the caller, like re-indexing).
 
@@ -348,7 +358,7 @@ Iteration API provides the following methods:
 * to get status of a running job by its id: `GET /instance-storage/instances/iteration/{jobId}`
 * to cancel a job: `DELETE /instance-storage/instances/iteration/{jobId}`
 
-When an iteration job is being submitted the client can specify target topic and event type (optional): 
+When an iteration job is being submitted the client can specify target topic and event type (optional):
 ```javascript
 {
   "eventType": "<event-type>",
@@ -357,7 +367,7 @@ When an iteration job is being submitted the client can specify target topic and
 ```
 If event type is missing in the request it will be defaulted to `ITERATE`.
 
-Once iteration job has been started, it initiates streaming of all instance IDs and publishing domain events for them. 
+Once iteration job has been started, it initiates streaming of all instance IDs and publishing domain events for them.
 The domain event has the following structure:
 * Topic: <target-topic-name>
 * Partition key: `The instance id`
