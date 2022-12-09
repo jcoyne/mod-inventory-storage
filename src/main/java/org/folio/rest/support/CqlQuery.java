@@ -14,6 +14,7 @@ public final class CqlQuery {
   /**
    * True if {@code cqlQuery} is a CQL expression with {@code cql.allRecords}.
    */
+  // should this be protected as it is called on the class only?
   public boolean isMatchingAll() {
     CQLNode cqlNode;
     try {

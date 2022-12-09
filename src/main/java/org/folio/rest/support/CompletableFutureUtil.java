@@ -5,6 +5,7 @@ import java.util.concurrent.CompletableFuture;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 
+// dead code if not used as an artifact dependency
 public final class CompletableFutureUtil {
   private CompletableFutureUtil() {}
 

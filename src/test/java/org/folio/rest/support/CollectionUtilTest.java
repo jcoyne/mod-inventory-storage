@@ -7,6 +7,7 @@ import java.util.List;
 
 import org.junit.Test;
 
+// test for dead code
 public class CollectionUtilTest {
   @Test
   public void shouldThrowIllegalArgumentExceptionWhenCannotSerializeToJson() {

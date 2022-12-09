@@ -8,6 +8,9 @@ import org.folio.dbschema.ObjectMapperTool;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+// is mod-inventory-storage used as an artifact dependency
+
+// dead code
 public final class CollectionUtil {
   private CollectionUtil() {}
 

@@ -9,6 +9,7 @@ import java.util.concurrent.CompletableFuture;
 
 import org.junit.Test;
 
+// test for dead code
 public class CompletableFutureUtilTest {
   @Test
   public void shouldReturnSuccess() {
