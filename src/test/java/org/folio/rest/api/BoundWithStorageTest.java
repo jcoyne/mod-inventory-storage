@@ -2,6 +2,7 @@ package org.folio.rest.api;
 
 import static org.awaitility.Awaitility.await;
 import static org.folio.rest.support.messages.BoundWithEventMessageChecks.boundWithCreatedMessagePublished;
+import static org.folio.rest.support.messages.BoundWithEventMessageChecks.boundWithUpdatedMessagePublished;
 import static org.folio.rest.support.messages.BoundWithEventMessageChecks.hasPublishedBoundWithHoldingsRecordIds;
 import static org.folio.utility.ModuleUtility.getClient;
 import static org.hamcrest.CoreMatchers.is;
@@ -130,6 +131,9 @@ public class BoundWithStorageTest extends TestBaseWithInventoryUtil {
 
     boundWithCreatedMessagePublished(partOneCreated.getJson(), instance1.getId().toString());
     boundWithCreatedMessagePublished(partTwoCreated.getJson(), instance2.getId().toString());
+
+    boundWithUpdatedMessagePublished(partTwoCreated.getJson(), updateResponse.getJson(),
+      instance2.getId().toString(), instance3.getId().toString());
 
     await().atMost(10, TimeUnit.SECONDS)
       .until(() -> hasPublishedBoundWithHoldingsRecordIds(

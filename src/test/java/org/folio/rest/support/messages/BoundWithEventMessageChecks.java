@@ -1,6 +1,7 @@
 package org.folio.rest.support.messages;
 
 import static org.folio.rest.support.AwaitConfiguration.awaitAtMost;
+import static org.folio.rest.support.kafka.FakeKafkaConsumer.getMessagesForBoundWith;
 import static org.folio.utility.ModuleUtility.vertxUrl;
 import static org.folio.utility.RestUtility.TENANT_ID;
 
@@ -38,6 +39,15 @@ public class BoundWithEventMessageChecks {
     awaitAtMost().until(() -> FakeKafkaConsumer.getMessagesForBoundWith(instanceId),
       eventMessageMatchers.hasCreateEventMessageFor(
         addInstanceIdToBoundWith(boundWith, instanceId)));
+  }
+
+  public static void boundWithUpdatedMessagePublished(JsonObject oldBoundWith,
+    JsonObject newBoundWith, String oldInstanceId, String newInstanceId) {
+
+    awaitAtMost().until(() -> getMessagesForBoundWith(newInstanceId),
+      eventMessageMatchers.hasUpdateEventMessageFor(
+        addInstanceIdToBoundWith(oldBoundWith, oldInstanceId),
+        addInstanceIdToBoundWith(newBoundWith, newInstanceId)));
   }
 
   private static JsonObject addInstanceIdToBoundWith(JsonObject boundWith, String instanceId) {
