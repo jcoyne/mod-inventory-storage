@@ -64,7 +64,7 @@ WITH instanceIdsInRange AS ( SELECT inst.id AS instanceId,
                              FROM ${myuniversity}_${mymodule}.audit_holdings_record audit_holdings_record
                              WHERE ((strToTimestamp(audit_holdings_record.jsonb ->> 'createdDate')) BETWEEN dateOrMin($1) AND dateOrMax($2))
                                      AND NOT EXISTS (SELECT NULL WHERE $5) )
-SELECT instanceId,
+SELECT instance.id,
        instance.jsonb ->> 'source' AS source,
        MAX(instanceIdsInRange.maxDate) AS maxDate,
        (instance.jsonb ->> 'discoverySuppress')::bool AS suppressFromDiscovery,
@@ -74,7 +74,7 @@ FROM instanceIdsInRange,
 WHERE instanceIdsInRange.maxDate BETWEEN dateOrMin($1) AND dateOrMax($2)
       AND instance.id = instanceIdsInRange.instanceId
       AND NOT ($4 AND COALESCE((instance.jsonb ->> 'discoverySuppress')::bool, false))
-GROUP BY 1, 2, 4
+GROUP BY 1
 
 UNION ALL
 SELECT (jsonb #>> '{record,id}')::uuid              AS instanceId,
