@@ -1,8 +1,5 @@
 package org.folio.persist;
 
-import static io.vertx.core.Promise.promise;
-import static org.folio.rest.persist.PgUtil.postgresClient;
-
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
@@ -10,14 +7,8 @@ import io.vertx.core.Promise;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.RowStream;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.folio.cql2pgjson.CQL2PgJSON;
 import org.folio.persist.entity.InstanceInternal;
 import org.folio.rest.exceptions.BadRequestException;
@@ -28,7 +19,20 @@ import org.folio.rest.persist.cql.CQLQueryValidationException;
 import org.folio.rest.persist.cql.CQLWrapper;
 import org.folio.rest.persist.interfaces.Results;
 
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
+import static io.vertx.core.Promise.promise;
+import static org.folio.rest.persist.PgUtil.postgresClient;
+
 public class InstanceInternalRepository extends AbstractRepository<Instance> {
+  private static final Logger log = LogManager.getLogger();
 
   public static final String INSTANCE_TABLE = "instance";
 
@@ -75,12 +79,14 @@ public class InstanceInternalRepository extends AbstractRepository<Instance> {
 
   @Override
   public Future<Instance> getById(String id) {
+    log.info("public Future<Instance> getById(String id)");
     return postgresClientFuturized.getById(tableName, id, InstanceInternal.class)
       .map(instanceInternal -> Objects.nonNull(instanceInternal) ? instanceInternal.toInstanceDto() : null);
   }
 
   @Override
   public Future<Map<String, Instance>> getById(Collection<String> ids) {
+    log.info("public Future<Map<String, Instance>> getById(Collection<String> ids)");
     return postgresClientFuturized.getById(tableName, ids, InstanceInternal.class)
       .map(InstanceInternalRepository::toInstancesMap);
   }

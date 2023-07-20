@@ -1,19 +1,10 @@
 package org.folio.rest.impl;
 
-import static io.vertx.core.Future.succeededFuture;
-import static org.folio.persist.InstanceMarcRepository.INSTANCE_SOURCE_MARC_TABLE;
-import static org.folio.persist.InstanceRelationshipRepository.INSTANCE_RELATIONSHIP_TABLE;
-import static org.folio.persist.InstanceRepository.INSTANCE_TABLE;
-import static org.folio.rest.support.EndpointFailureHandler.handleFailure;
-
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.ext.web.RoutingContext;
-import java.util.List;
-import java.util.Map;
-import javax.ws.rs.core.Response;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.folio.cql2pgjson.CQL2PgJSON;
@@ -38,6 +29,16 @@ import org.folio.rest.tools.messages.MessageConsts;
 import org.folio.rest.tools.messages.Messages;
 import org.folio.rest.tools.utils.TenantTool;
 import org.folio.services.instance.InstanceService;
+
+import javax.ws.rs.core.Response;
+import java.util.List;
+import java.util.Map;
+
+import static io.vertx.core.Future.succeededFuture;
+import static org.folio.persist.InstanceMarcRepository.INSTANCE_SOURCE_MARC_TABLE;
+import static org.folio.persist.InstanceRelationshipRepository.INSTANCE_RELATIONSHIP_TABLE;
+import static org.folio.persist.InstanceRepository.INSTANCE_TABLE;
+import static org.folio.rest.support.EndpointFailureHandler.handleFailure;
 
 public class InstanceStorageApi implements InstanceStorage {
   private static final Logger log = LogManager.getLogger();
@@ -272,6 +273,7 @@ public class InstanceStorageApi implements InstanceStorage {
     Handler<AsyncResult<Response>> asyncResultHandler,
     Context vertxContext) {
 
+    log.info("public Future<Instance> getById(String id)");
     new InstanceService(vertxContext, okapiHeaders).getInstance(instanceId)
       .otherwise(EndpointFailureHandler::failureResponse)
       .onComplete(asyncResultHandler);
