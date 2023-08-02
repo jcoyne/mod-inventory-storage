@@ -31,11 +31,11 @@ import org.folio.rest.persist.PgUtil;
 import org.folio.rest.persist.PostgresClientFuturized;
 
 public final class AsyncMigrationJobService {
-  private static final List<AsyncMigrationJobRunner> MIGRATION_JOB_RUNNERS = List
-    .of(new PublicationPeriodMigrationJobRunner(), new ShelvingOrderMigrationJobRunner(),
-      new SubjectSeriesMigrationJobRunner());
-  private static final List<AsyncMigrationJob.JobStatus> ACCEPTABLE_STATUSES = List
-    .of(AsyncMigrationJob.JobStatus.IN_PROGRESS, IDS_PUBLISHED);
+  private static final List<AsyncMigrationJobRunner> MIGRATION_JOB_RUNNERS = List.of(
+    new PublicationPeriodMigrationJobRunner(), new ShelvingOrderMigrationJobRunner(),
+    new SubjectSeriesMigrationJobRunner(), new CallNumberTypeMigrationJobRunner());
+  private static final List<AsyncMigrationJob.JobStatus> ACCEPTABLE_STATUSES = List.of(
+    AsyncMigrationJob.JobStatus.IN_PROGRESS, IDS_PUBLISHED);
 
   private final AsyncMigrationJobRepository migrationJobRepository;
   private final AsyncMigrationContext migrationContext;
@@ -93,7 +93,7 @@ public final class AsyncMigrationJobService {
     migrationJobRepository.fetchAndUpdate(jobId,
       resp -> {
         var finalStatus = resp.getJobStatus() == PENDING_CANCEL
-                          ? CANCELLED : ID_PUBLISHING_FAILED;
+          ? CANCELLED : ID_PUBLISHING_FAILED;
         return resp.withJobStatus(finalStatus).withFinishedDate(new Date());
       });
   }
@@ -153,8 +153,8 @@ public final class AsyncMigrationJobService {
             .mapToInt(Integer::intValue).sum();
 
           job.setJobStatus(totalProcessed >= totalPublished
-                           ? AsyncMigrationJob.JobStatus.COMPLETED
-                           : AsyncMigrationJob.JobStatus.IN_PROGRESS);
+            ? AsyncMigrationJob.JobStatus.COMPLETED
+            : AsyncMigrationJob.JobStatus.IN_PROGRESS);
         }
         if (job.getJobStatus().equals(AsyncMigrationJob.JobStatus.COMPLETED)) {
           job.setFinishedDate(new Date());

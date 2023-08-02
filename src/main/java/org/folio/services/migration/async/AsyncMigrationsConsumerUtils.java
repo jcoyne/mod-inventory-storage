@@ -13,7 +13,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
@@ -41,10 +40,7 @@ public final class AsyncMigrationsConsumerUtils {
         var headers = new CaseInsensitiveMap<String, String>();
         headers.put(TENANT_HEADER, tenantId);
 
-        var availableMigrations = Set.of(
-          new PublicationPeriodMigrationService(vertxContext, headers),
-          new ShelvingOrderAsyncMigrationService(vertxContext, headers),
-          new SubjectSeriesMigrationService(vertxContext, headers));
+        var availableMigrations = availableMigrationServices(vertxContext, headers);
         var jobService = new AsyncMigrationJobService(vertxContext, headers);
 
         var migrationEvents = buildIdsForMigrations(v.getValue());
@@ -59,15 +55,24 @@ public final class AsyncMigrationsConsumerUtils {
               .map(javaMigration -> javaMigration.runMigrationForIds(ids)
                 .onSuccess(notUsed -> jobService.logJobProcessed(migrationName, migrationJob.getId(), ids.size()))
                 .onFailure(notUsed -> jobService.logJobFail(migrationJob.getId())))
-              .collect(Collectors.toList());
+              .toList();
             return CompositeFuture.all(new ArrayList<>(startedMigrations));
-          }).collect(Collectors.toList());
+          }).toList();
 
         CompositeFuture.all(new ArrayList<>(migrations))
           .onSuccess(composite -> consumer.commit())
           .onFailure(any -> log.error("Error persisting and committing messages", any));
       });
     };
+  }
+
+  private static Set<AsyncBaseMigrationService> availableMigrationServices(Context vertxContext,
+                                                                           Map<String, String> okapiHeaders) {
+    return Set.of(
+      new PublicationPeriodMigrationService(vertxContext, okapiHeaders),
+      new ShelvingOrderAsyncMigrationService(vertxContext, okapiHeaders),
+      new CallNumberTypeMigrationService(vertxContext, okapiHeaders),
+      new SubjectSeriesMigrationService(vertxContext, okapiHeaders));
   }
 
   private static boolean shouldProcessIdsForJob(AsyncBaseMigrationService javaMigration,
@@ -134,7 +139,7 @@ public final class AsyncMigrationsConsumerUtils {
   private static AsyncMigrationJob getMigrationJobFromMessage(ConsumerRecord<String, JsonObject> message) {
     final JsonObject payload = message.value();
     final var oldOrNew = payload.containsKey("new")
-                         ? payload.getJsonObject("new") : payload.getJsonObject("old");
+      ? payload.getJsonObject("new") : payload.getJsonObject("old");
     return oldOrNew != null ? oldOrNew.mapTo(AsyncMigrationJob.class) : null;
   }
 

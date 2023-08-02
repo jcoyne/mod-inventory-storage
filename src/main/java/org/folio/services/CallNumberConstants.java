@@ -8,4 +8,6 @@ public class CallNumberConstants {
   public static final String NLM_CN_TYPE_ID = "054d460d-d6b9-4469-9e37-7a78a2266655";
 
   public static final String SU_DOC_CN_TYPE_ID = "fc388041-6cd0-4806-8a74-ebe3b9ab4c6e";
+
+  public static final String OTHER_SCHEME_TYPE_ID = "fc388041-6cd0-4806-8a74-ebe3b9ab4c6e";
 }
