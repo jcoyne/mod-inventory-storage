@@ -29,7 +29,6 @@ public class CallNumberTypeMigrationService extends AsyncBaseMigrationService {
 
   public CallNumberTypeMigrationService(PostgresClientFuturized postgresClient,
                                         InstanceRepository instanceRepository) {
-
     super("26.0.0", postgresClient);
     this.postgresClient = postgresClient;
     this.instanceRepository = instanceRepository;

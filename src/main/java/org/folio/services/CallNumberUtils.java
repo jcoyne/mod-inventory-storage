@@ -1,9 +1,9 @@
 package org.folio.services;
 
-import static org.folio.services.CallNumberConstants.DEWEY_CN_TYPE_ID;
-import static org.folio.services.CallNumberConstants.LC_CN_TYPE_ID;
-import static org.folio.services.CallNumberConstants.NLM_CN_TYPE_ID;
-import static org.folio.services.CallNumberConstants.SU_DOC_CN_TYPE_ID;
+import static org.folio.services.SystemCallNumberType.DEWEY_DECIMAL;
+import static org.folio.services.SystemCallNumberType.LIBRARY_OF_CONGRESS;
+import static org.folio.services.SystemCallNumberType.NATIONAL_LIBRARY_OF_MEDICINE;
+import static org.folio.services.SystemCallNumberType.SUPERINTENDENT_OF_DOCUMENTS;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -22,10 +22,10 @@ public final class CallNumberUtils {
   }
 
   static {
-    logCallNumberMap.put(DEWEY_CN_TYPE_ID, (String cn) -> getValidShelfKey(new DeweyCallNumber(cn)));
-    logCallNumberMap.put(LC_CN_TYPE_ID, (String cn) -> getValidShelfKey(new LCCallNumber(cn)));
-    logCallNumberMap.put(NLM_CN_TYPE_ID, (String cn) -> getValidShelfKey(new NlmCallNumber(cn)));
-    logCallNumberMap.put(SU_DOC_CN_TYPE_ID, (String cn) -> getValidShelfKey(new SuDocCallNumber(cn)));
+    logCallNumberMap.put(DEWEY_DECIMAL.getId(), (String cn) -> getValidShelfKey(new DeweyCallNumber(cn)));
+    logCallNumberMap.put(LIBRARY_OF_CONGRESS.getId(), (String cn) -> getValidShelfKey(new LCCallNumber(cn)));
+    logCallNumberMap.put(NATIONAL_LIBRARY_OF_MEDICINE.getId(), (String cn) -> getValidShelfKey(new NlmCallNumber(cn)));
+    logCallNumberMap.put(SUPERINTENDENT_OF_DOCUMENTS.getId(), (String cn) -> getValidShelfKey(new SuDocCallNumber(cn)));
   }
 
   public static Optional<String> getShelfKeyFromCallNumber(String callNumberTypeId, String callNumber) {
