@@ -152,6 +152,11 @@
         "type": "string"
       }
     },
+    "isDcbItem": {
+      "type": "boolean",
+      "description": "If true, determines that the item is a DCB item",
+      "default": false
+    },
     "notes": {
       "type": "array",
       "description": "Notes about action, copy, binding etc.",
